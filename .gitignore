@@ -1,0 +1,19 @@
+# MPLAB X: archivos que el IDE genera al abrir o compilar el proyecto
+*.X/build/
+*.X/dist/
+*.X/debug/
+*.X/.generated_files/
+*.X/nbproject/private/
+*.X/nbproject/Makefile-*.mk
+*.X/nbproject/Makefile-genesis.properties
+*.X/nbproject/Package-*.bash
+*.X/mcc_generated_files/**/*.bak
+
+# Pruebas en el PC
+tests/test_iq_proc
+tests/build/
+
+# Python y grabaciones del programa del PC
+__pycache__/
+*.pyc
+medida_*.csv
