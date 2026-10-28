@@ -12,6 +12,8 @@ Firmware para **PIC16F18426** (MPLAB X + XC8 + **MCC Classic**) que lee las dos 
 
 La especificación de partida está en [`docs/P2_IQ_procesamiento_para_PIC16F18426.md`](docs/P2_IQ_procesamiento_para_PIC16F18426.md); el código cita sus secciones (P1…P10, 10.4, 10.6…).
 
+**Avance separado: solo el ADC a 1000 muestras/s.** El proyecto [`ADC_1kSPS_PIC16F18426.X`](ADC_1kSPS_PIC16F18426.X) muestrea una señal de un generador en RC0, disparada por el PWM6 cada 1 ms, y envía cada muestra por la UART. [`pc/adc_1ksps.py`](pc/adc_1ksps.py) la dibuja con su espectro, SNR y ENOB. Guía de montaje y presentación: [`docs/avance_adc_1ksps.md`](docs/avance_adc_1ksps.md).
+
 ## Estado de la verificación
 
 | Qué | Cómo | Resultado |
@@ -19,6 +21,7 @@ La especificación de partida está en [`docs/P2_IQ_procesamiento_para_PIC16F184
 | Procesamiento (P1–P10) | `tests/test_iq_proc.c`: el mismo `iq_proc.c` del PIC compilado con gcc, con los vectores de la sección 9.1, las etapas activables, el autocero y casos extra | 102/102 correctas |
 | Firmware completo (`main.c` y `app/`) | `tests/sim`: se compila sin cambios contra un hardware simulado (ADC disparado cada 100 µs con +3 LSB de offset, fisura sintética, UART, EEPROM, botones, paradas del lazo de 30 y 150 ms, captura `m`, etapas desactivadas) | 34/34 comprobaciones |
 | Medida del jitter | `tests/test_medir_jitter.py`: ADC ideal de 12 bits (SINAD = 74 dB) y capturas simuladas con σ conocido (10 y 30 ns: error < 10 %) | 19/19 |
+| Avance ADC 1 kS/s | `tests/adc1k`: firmware simulado con la UART a su velocidad real (cada línea enviada se compara con su conversión); `tests/test_adc_1ksps.py` | 19/19 y 19/19 |
 | Nombres de registros y bits | todos los `.c` contra el `pic16f18426.h` oficial (DFP 1.32.471) con gcc; las 146 macros de pines; los `#pragma config` contra el `cfgdata` del dispositivo | sin errores |
 | Programa del PC | `tests/test_plano_polar.py` (19/19) y prueba sin ventana con `--demo` y `--archivo` | correcto |
 | **Compilación con XC8** | **no se ha podido ejecutar XC8 en el entorno donde se escribió** | **pendiente: compilar en MPLAB X** |
@@ -44,6 +47,8 @@ P2_IQ_PIC16F18426.X/            proyecto de MPLAB X (abrir esta carpeta)
 └── nbproject/, Makefile        archivos del proyecto de MPLAB X
 pc/plano_polar.py               plano polar, gráficas, botones y grabación CSV en el PC
 pc/medir_jitter.py              SNR, ENOB y jitter de muestreo con las capturas de la orden m
+ADC_1kSPS_PIC16F18426.X/        avance separado: solo el ADC a 1000 muestras/s con salida serie
+pc/adc_1ksps.py                 su programa del PC: señal, espectro, SNR/ENOB y CSV
 tests/                          pruebas en el PC (make)
 docs/                           especificación, guía de MCC Classic y análisis del ADC y el jitter
 ```
@@ -226,7 +231,8 @@ cd tests
 make          # todo
 make test     # procesamiento con los vectores de la sección 9.1 (gcc)
 make sim      # firmware completo con hardware simulado y comprobación de su salida
-make pc       # programas del PC: intérprete de líneas, CSV y análisis del jitter (numpy)
+make adc1k    # avance ADC 1 kS/s: firmware simulado y comprobación de lo que envía
+make pc       # programas del PC: intérprete de líneas, CSV, análisis del jitter y adc_1ksps (numpy)
 ```
 
 `make sim` deja la salida del firmware simulado en `tests/build/sim/arranque1.txt`; se puede ver con `python pc/plano_polar.py --archivo tests/build/sim/arranque1.txt`.
