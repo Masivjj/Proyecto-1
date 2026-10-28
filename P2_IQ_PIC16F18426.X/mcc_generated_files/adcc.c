@@ -18,6 +18,11 @@
 #include "adcc.h"
 
 /**
+  Section: ADCC Module Variables
+*/
+void (*ADCC_ADI_InterruptHandler)(void);
+
+/**
   Section: ADCC Module APIs
 */
 
@@ -38,8 +43,8 @@ void ADCC_Initialize(void)
     ADSTPTH = 0x00;
     // ADACC 0;
     ADACCU = 0x00;
-    // ADRPT 16;
-    ADRPT = 0x10;
+    // ADRPT 0;
+    ADRPT = 0x00;
     // ADPCH ANA0;
     ADPCH = 0x00;
     // ADACQ 8;
@@ -54,21 +59,27 @@ void ADCC_Initialize(void)
     ADPREH = 0x00;
     // ADDSEN disabled; ADGPOL digital_low; ADIPEN disabled; ADPPOL Vss;
     ADCON1 = 0x00;
-    // ADCRS 0; ADMD Burst_average_mode; ADACLR disabled; ADPSIS RES;
-    ADCON2 = 0x03;
-    // ADCALC First derivative of Single measurement; ADTMD enabled; ADSOI ADGO not cleared;
-    ADCON3 = 0x07;
+    // ADCRS 0; ADMD Basic_mode; ADACLR disabled; ADPSIS RES;
+    ADCON2 = 0x00;
+    // ADCALC First derivative of Single measurement; ADTMD disabled; ADSOI ADGO not cleared;
+    ADCON3 = 0x00;
     // ADMATH registers not updated;
     ADSTAT = 0x00;
     // ADNREF VSS; ADPREF VDD;
     ADREF = 0x00;
-    // ADACT disabled;
-    ADACT = 0x00;
+    // ADACT PWM6_OUT;
+    ADACT = 0x0E;
     // ADCS FOSC/32;
     ADCLK = 0x0F;
     // ADGO stop; ADFM right; ADON enabled; ADCS FOSC/ADCLK; ADCONT disabled;
     ADCON0 = 0x84;
 
+    // Clear the ADC interrupt flag
+    PIR1bits.ADIF = 0;
+    // Enabling ADCC interrupt.
+    PIE1bits.ADIE = 1;
+
+    ADCC_SetADIInterruptHandler(ADCC_DefaultInterruptHandler);
 }
 
 void ADCC_StartConversion(adcc_channel_t channel)
@@ -255,4 +266,24 @@ uint8_t ADCC_GetConversionStageStatus(void)
 {
     //Returns the contents of ADSTATbits.ADSTAT field.
     return ADSTATbits.ADSTAT;
+}
+
+void ADCC_ISR(void)
+{
+    // Clear the ADCC interrupt flag
+    PIR1bits.ADIF = 0;
+
+    if (ADCC_ADI_InterruptHandler)
+    {
+        ADCC_ADI_InterruptHandler();
+    }
+}
+
+void ADCC_SetADIInterruptHandler(void (* InterruptHandler)(void)){
+    ADCC_ADI_InterruptHandler = InterruptHandler;
+}
+
+void ADCC_DefaultInterruptHandler(void){
+    // add your ADCC interrupt custom code
+    // or set custom function using ADCC_SetADIInterruptHandler()
 }

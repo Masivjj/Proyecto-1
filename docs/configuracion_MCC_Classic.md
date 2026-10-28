@@ -64,33 +64,36 @@ En *Pin Manager: Grid View* marca los pines y, en *Pin Module*, pon el nombre (*
 | 3 | RA4 | Pin Module → GPIO input | `BTN_THETA` | in | | ✔ |
 | 2 | RA5 | Pin Module → GPIO output | `LED` | out | | |
 
-RA0 y RA1 (ICSPDAT/ICSPCLK) quedan sin usar, en analógico. RA3 es MCLR (pull-up externo de 10 kΩ).
+RA0 (ICSPDAT) queda sin usar, en analógico. RA3 es MCLR (pull-up externo de 10 kΩ).
+
+RA1 (ICSPCLK) **no se asigna en MCC**: en las compilaciones de producción `app/adquisicion.c` saca por él la salida del PWM6 (`RA1PPS = 0x0D`, digital, salida, sin limitar la pendiente) para medir el jitter del disparo con un osciloscopio. En las de depuración (`__DEBUG`) o con `SALIDA_DISPARO = 0` queda libre para el depurador. Ver `docs/analisis_adc_jitter.md`.
 
 ---
 
 ## 4. ADCC (ADC with Computation)
 
+Modo básico (sección 32.2.7 de la hoja de datos): una conversión por cada flanco de subida del PWM6, sin intervención del software. El porqué de cada valor está en `docs/analisis_adc_jitter.md`.
+
 | Campo | Valor | Por qué |
 |---|---|---|
 | Enable ADC | ✔ | |
-| Operating Mode | **Burst_average_mode** | el hardware repite la conversión ADRPT veces seguidas |
+| Operating Mode | **Basic_mode** | una conversión por disparo (MD = 000) |
 | Result Alignment | right | |
 | Positive Reference | VDD | normalización ratiométrica: VDD se cancela (sección 10.4) |
 | Negative Reference | VSS | |
-| Auto-conversion Trigger | disabled | la conversión la lanza el programa |
-| Clock Source | FOSC/ADCLK | |
-| Clock | **FOSC/32** | TAD = 1.0 µs (hoja de datos: 0.5 a 9 µs) |
-| Acquisition Count | **8** | 8 µs de adquisición: sobra para fuentes de baja impedancia |
+| Auto-conversion Trigger | **PWM6_OUT** | el instante de muestreo lo marca el hardware: su jitter es el del oscilador |
+| Clock Source | **FOSC/ADCLK** | síncrono con FOSC y con el disparo (con FRC no lo sería) |
+| Clock | **FOSC/32** | TAD = 1.0 µs (hoja de datos: 0.5 a 9 µs); 100 µs de disparo = 100 TAD exactos |
+| Acquisition Count | **8** | 8 µs de adquisición (la hoja de datos pide 7.8 µs con 10 kΩ de fuente) |
 | Precharge Time | 0 | |
-| Repeat (ADRPT) | **16** | `N_SOBREMUESTREO` en `app/app_config.h` |
-| Accumulator Right Shift (ADCRS) | **0** | ADFLTR = suma de las 16 conversiones (0..65520) |
-| Error Calculation (ADCALC) | First derivative of single measurement | no se usa |
-| Threshold Interrupt Mode (ADTMD) | **Interrupt regardless of threshold test results** ("always") | ADTIF marca el final de cada ráfaga |
-| ADC Interrupt / ADC Threshold Interrupt | sin marcar | el programa consulta ADTIF |
+| Repeat (ADRPT) | 0 | no se usa en modo básico |
+| Error Calculation / Threshold | por defecto | no se usan |
+| Enable ADC Interrupt | **✔** | ADIF al terminar cada conversión: la interrupción suma el resultado y elige el canal siguiente |
+| ADC Threshold Interrupt | sin marcar | |
 | Continuous operation | sin marcar | |
-| Double sampling (ADDSEN) | sin marcar | la errata del Burst Average solo afecta con doble muestreo |
+| Double sampling (ADDSEN) | sin marcar | |
 
-`app/adquisicion.c` vuelve a fijar ADRPT, ADCRS, el modo y ADTMD al arrancar, porque el procesamiento depende de que el resultado sea la suma de 16 conversiones.
+`app/adquisicion.c` vuelve a fijar ADCONT, ADCS, el modo y ADACT al arrancar, porque la secuencia de canales depende de ellos, e instala su función de interrupción con `ADCC_SetADIInterruptHandler()`.
 
 ---
 
@@ -107,7 +110,7 @@ Con él se conoce VCC_A en voltios (`VCC_A = 1.024 · cV / cFVR`) para la protec
 
 ---
 
-## 6. TMR2 (tick de 10 ms)
+## 6. TMR2 (base de tiempo del PWM6)
 
 | Campo | Valor |
 |---|---|
@@ -115,16 +118,31 @@ Con él se conoce VCC_A en voltios (`VCC_A = 1.024 · cV / cFVR`) para la protec
 | Control Mode | Roll over pulse |
 | Start/Reset Option | Software control |
 | Clock Source | FOSC/4 |
-| Prescaler | 1:128 |
-| Postscaler | 1:5 |
-| Timer Period | **10 ms** (MCC pone T2PR = 124) |
-| Enable Timer Interrupt | ✔ |
+| Prescaler | **1:4** |
+| Postscaler | 1:1 |
+| Timer Period | **100 µs** (MCC pone T2PR = 199) |
+| Enable Timer Interrupt | **sin marcar** |
 
-128 · 125 · 5 / 8 MHz = 10.000 ms exactos.
+4 · 200 / 8 MHz = 100.000 µs exactos = 3200 ciclos de FOSC = 100 TAD. Una trama de 10 ms son 100 periodos.
 
 ---
 
-## 7. EUSART1
+## 7. PWM6 (disparo del ADC)
+
+Añade **PWM6** desde Device Resources (PWM).
+
+| Campo | Valor |
+|---|---|
+| Enable PWM | ✔ |
+| Select a Timer | **Timer2** |
+| Duty Cycle | **50 %** (50 µs; MCC pone PWM6DCH = 0x64, PWM6DCL = 0x00) |
+| PWM Polarity | active_hi |
+
+No asignes su salida a ningún pin en el Pin Manager (ver la nota de RA1 en la sección 3). El ADC usa la señal interna PWM6_OUT aunque no salga por ningún pin.
+
+---
+
+## 8. EUSART1
 
 | Campo | Valor |
 |---|---|
@@ -141,29 +159,33 @@ Con él se conoce VCC_A en voltios (`VCC_A = 1.024 · cV / cFVR`) para la protec
 
 ---
 
-## 8. Memory
+## 9. Memory
 
 Añade el módulo **Memory** (Device Resources). Genera `DATAEE_ReadByte()` y `DATAEE_WriteByte()` (y las funciones FLASH_x, que no se usan). La EEPROM de datos está en 0xF000–0xF0FF; el firmware guarda ahí I0, Q0, θ, G y las etapas activas (17 bytes).
 
 ---
 
-## 9. Interrupt Module
+## 10. Interrupt Module
 
-Deja habilitadas las interrupciones de TMR2 y EUSART1 (TX y RX); MCC genera `interrupt_manager.c`. `main.c` activa GIE y PEIE después de inicializar.
+Deja habilitadas las interrupciones del ADC (ADI) y de la EUSART1 (TX y RX); la del TMR2, no. MCC genera `interrupt_manager.c`; el del proyecto atiende primero el ADC. `main.c` activa GIE y PEIE después de inicializar.
+
+La interrupción del ADC no decide el instante de muestreo (lo decide el PWM6): solo tiene que leer el resultado y elegir el canal antes del disparo siguiente, con ~75 µs de margen.
 
 ---
 
-## 10. Generar
+## 11. Generar
 
 Pulsa **Generate**. Si MCC propone cambios en `main.c`, conserva el `main.c` del proyecto. Después comprueba que estos valores coinciden con los de los archivos generados:
 
 | Archivo | Registro | Valor |
 |---|---|---|
 | `mcc.c` | OSCCON1 / OSCFRQ | 0x60 / 0x06 |
-| `adcc.c` | ADCON0 / ADCON2 / ADCON3 | 0x84 / 0x03 / 0x07 |
-| `adcc.c` | ADCLK / ADRPT / ADACQL | 0x0F / 0x10 / 0x08 |
+| `adcc.c` | ADCON0 / ADCON2 / ADCON3 | 0x84 / 0x00 / 0x00 |
+| `adcc.c` | ADCLK / ADACQL / ADACT | 0x0F / 0x08 / 0x0E |
+| `adcc.c` | PIE1bits.ADIE | 1 |
 | `fvr.c` | FVRCON | 0x81 |
-| `tmr2.c` | T2CLKCON / T2PR / T2CON | 0x01 / 0x7C / 0xF4 |
+| `tmr2.c` | T2CLKCON / T2PR / T2CON | 0x01 / 0xC7 / 0xA0 |
+| `pwm6.c` | PWM6CON / PWM6DCH / PWM6DCL / CCPTMRS1.P6TSEL | 0x80 / 0x64 / 0x00 / 1 |
 | `eusart1.c` | BAUD1CON / RC1STA / TX1STA / SP1BRGL | 0x08 / 0x90 / 0x24 / 0x44 |
 | `pin_manager.c` | ANSELA / ANSELC / TRISA / TRISC / WPUA | 0x03 / 0x0F / 0x1F / 0x2F / 0x14 |
 | `pin_manager.c` | RX1PPS / RC4PPS | 0x15 / 0x0F |

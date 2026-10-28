@@ -41,10 +41,23 @@ comprobar("lineas vacias o rotas se ignoran",
           pp.interpretar("") is None and pp.interpretar("12,3") is None and pp.interpretar("B,1,2") is None
           and pp.interpretar("\x00\xff basura") is None)
 
+comprobar("captura de la orden 'm': codigos del ADC",
+          pp.interpretar("M,1887,1888,1886") == ("captura", (1887, 1888, 1886)))
+comprobar("captura rota se ignora", pp.interpretar("M,1887,x") is None)
+comprobar("todas las etapas: 31 (cero, theta, ganancia, normalizacion y autocero)", pp.TODAS == 31)
+
 comprobar("configuracion del PIC con etapas",
-          pp.interpretar_configuracion("# G=101 cero=OFF theta=ON ganancia=OFF norm=ON I0_uV=1 Q0_uV=2 theta_cdeg=3")
+          pp.interpretar_configuracion("# G=101 cero=OFF theta=ON ganancia=OFF norm=ON autocero=OFF "
+                                       "I0_uV=1 Q0_uV=2 theta_cdeg=3")
           == {"G": 101, "etapas": 0x02 | 0x08})
+comprobar("configuracion de un firmware sin autocero: se da por activo",
+          pp.interpretar_configuracion("# G=2 cero=ON theta=ON ganancia=ON norm=ON I0_uV=1 Q0_uV=2 theta_cdeg=3")
+          == {"G": 2, "etapas": pp.TODAS})
 comprobar("otras lineas no son configuracion", pp.interpretar_configuracion("# z: fijar cero") is None)
+
+resumen = pp.resumen_captura([10, 12, 10, 12])
+comprobar("resumen de la captura: media, desviacion y pico a pico",
+          "4 códigos, media 11.00, desviación 1.15 LSB, pico a pico 2 LSB" in resumen)
 
 with tempfile.TemporaryDirectory() as carpeta:
     ruta = os.path.join(carpeta, "medida.csv")

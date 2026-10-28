@@ -7,15 +7,29 @@
  * Con la salida por UART (opcion A) el PC guarda y dibuja la traza larga;
  * esta copia corta se vuelca con la orden 'p' y sirve de base para una
  * pantalla local (opcion B).
+ *
+ * La misma memoria sirve de buffer para la captura de la orden 'm'
+ * (traza_prestar_memoria), para no gastar otros 400 bytes de RAM.
  */
 #include "traza.h"
+
+static union {
+#if N_TRAZA > 0u
+    struct {
+        float i[N_TRAZA];
+        float q[N_TRAZA];
+    } traza;
+#endif
+    uint16_t captura[N_CAPTURA];
+} memoria;
 
 #if N_TRAZA > 0u
 
 typedef char traza_indice_de_8_bits[(N_TRAZA <= 127u) ? 1 : -1];
 
-static float   traza_i[N_TRAZA];
-static float   traza_q[N_TRAZA];
+#define traza_i     memoria.traza.i
+#define traza_q     memoria.traza.q
+
 static uint8_t siguiente;       /* posicion del proximo punto */
 static uint8_t cuenta;          /* puntos validos */
 
@@ -85,3 +99,9 @@ bool traza_leer(uint8_t n, float *i1, float *q1)
 }
 
 #endif
+
+uint16_t *traza_prestar_memoria(void)
+{
+    traza_borrar();
+    return memoria.captura;
+}

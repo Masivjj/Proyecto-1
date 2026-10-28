@@ -20,6 +20,7 @@
 #define PI 3.14159265358979
 
 static double vdd = 4.095;
+static int offset_adc = 0;      /* offset del ADC simulado (LSB) */
 static int fallos = 0;
 static int total = 0;
 
@@ -46,7 +47,7 @@ static void comprobar_cond(const char *nombre, bool condicion)
 /* Suma de N_SOBREMUESTREO conversiones de la tension v (ADC de 12 bits contra VDD) */
 static uint16_t codigo(double v)
 {
-    double c = floor(v / vdd * (double)ADC_CUENTAS + 0.5);
+    double c = floor(v / vdd * (double)ADC_CUENTAS + 0.5) + offset_adc;
 
     if (c < 0.0) {
         c = 0.0;
@@ -67,6 +68,7 @@ static iq_codigos_t codigos(double iraw, double qraw, double vcc)
     c.cR = codigo(vref);
     c.cV = codigo(vcc / DIVISOR_VCCA);
     c.cF = codigo(FVR_V);
+    c.cZ = codigo(0.0);                     /* AVSS: el offset del ADC */
     return c;
 }
 
@@ -232,7 +234,29 @@ static void prueba_12(void)
     comprobar("#12 giro en 0.99 s (grados; negativo = horario)", giro * 180.0 / PI, -4.0 * 360.0 * 0.99, 0.5);
 }
 
-/* Etapas que se activan y desactivan (ordenes Z, T, G y N) */
+/* Autocero: el offset del ADC se mide en AVSS y se resta */
+static void pruebas_autocero(void)
+{
+    iq_muestra_t m;
+    iq_bloque_t b;
+
+    printf("\n-- Autocero: offset del ADC de +5 LSB en todas las conversiones\n");
+    offset_adc = 5;
+    iq_inicializar();
+    bloque(1.0, -0.5, 3.0, 0u, &m, &b);
+    comprobar("autocero activo: offset medido en AVSS (LSB)", iq_offset_lsb(), 5.0, 0.0);
+    comprobar("autocero activo: VCC_A sin error (V)", b.vcc, 3.0, 0.0005);
+    comprobar("autocero activo: Ip sin error (mV)", m.Ip, -500.0 * 3.7 / 3.0, 0.001);
+    iq_fijar_etapas(IQ_ETAPAS_TODAS & (uint8_t)~IQ_ETAPA_AUTOCERO);
+    bloque(1.0, -0.5, 3.0, 0u, &m, &b);
+    comprobar("autocero desactivado: VCC_A con el error del offset (V)", b.vcc,
+              1.024 * (3000.0 + 5.0) / (1024.0 + 5.0), 0.0005);
+    comprobar("autocero desactivado: Ip con el error del offset (mV)", m.Ip,
+              -16000.0 * 3700.0 / ((3000.0 + 5.0) * 16.0 * 2.0), 0.001);
+    offset_adc = 0;
+}
+
+/* Etapas que se activan y desactivan (ordenes Z, T, G, N y A) */
 static void pruebas_etapas(void)
 {
     iq_muestra_t m;
@@ -241,7 +265,7 @@ static void pruebas_etapas(void)
 
     printf("\n-- Etapas activables: cero, theta, ganancia y normalizacion\n");
     iq_inicializar();
-    comprobar_cond("al arrancar estan las cuatro activas", iq_etapas() == IQ_ETAPAS_TODAS);
+    comprobar_cond("al arrancar estan todas las etapas activas", iq_etapas() == IQ_ETAPAS_TODAS);
     comprobar_cond("iq_fijar_etapas ignora los bits que no son etapas", iq_fijar_etapas(0xFFu) == IQ_ETAPAS_TODAS);
 
     /* Ganancia */
@@ -407,6 +431,7 @@ int main(void)
     pruebas_4_a_8();
     pruebas_10_y_11();
     pruebas_etapas();
+    pruebas_autocero();
     prueba_12();
     pruebas_extra();
     pruebas_formato();

@@ -9,6 +9,7 @@ procesamiento del VI P2_IQ_SINAD.vi y envía por UART (115200 baudios):
     t_ms,Ip_uV,Qp_uV,I1_uV,Q1_uV                                  100 por segundo
     B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas
                                                                    10 por segundo
+    M,c1,...,c10        códigos del ADC de la captura de la orden 'm' (jitter)
 Este programa lo dibuja como el panel de LabVIEW:
   - plano polar: traza de los últimos N puntos (I', Q') unidos en orden de
     llegada, con autoescala (el anillo exterior vale el r máximo de la traza)
@@ -17,8 +18,11 @@ Este programa lo dibuja como el panel de LabVIEW:
 y envía las órdenes con botones o con el teclado:
     z Fijar cero   x Borrar 0   c Calibrar θ   t θ = 0   b Borrar traza
     2 / 1 / 0 ganancia ×2 / ×11 / ×101
-    Z / T / G / N activar o desactivar la etapa de cero / θ / ganancia /
-                  normalización a VCC_A (también con las casillas "Etapas")
+    Z / T / G / N / A  activar o desactivar la etapa de cero / θ / ganancia /
+                  normalización a VCC_A / autocero del ADC (también con las
+                  casillas "Etapas activas")
+    m captura de 200 conversiones de I_OUT (el análisis espectral y la
+      estimación del jitter los hace medir_jitter.py)
     g Grabar (CSV)
 
 Uso:
@@ -30,7 +34,7 @@ Uso:
     python plano_polar.py --archivo captura.txt         reproduce una captura
     python plano_polar.py --demo --png prueba.png --segundos 12   sin ventana
 
-Requisitos: pip install -r requirements.txt   (pyserial y matplotlib)
+Requisitos: pip install -r requirements.txt   (pyserial, matplotlib y numpy)
 """
 import argparse
 import collections
@@ -61,6 +65,7 @@ TECLAS = {
     "b": "Borrar traza", "2": "Ganancia ×2", "1": "Ganancia ×11",
     "0": "Ganancia ×101", "Z": "Etapa de cero", "T": "Etapa de θ",
     "G": "Etapa de ganancia", "N": "Etapa de normalización a VCC_A",
+    "A": "Etapa de autocero del ADC", "m": "Captura (jitter)",
 }
 GANANCIAS = {2: "2", 11: "1", 101: "0"}         # ganancia -> orden
 
@@ -70,8 +75,15 @@ ETAPAS = (
     (0x02, "T", "theta", "θ"),
     (0x04, "G", "ganancia", "Ganancia"),
     (0x08, "N", "norm", "Norm. VCC_A"),
+    (0x10, "A", "autocero", "Autocero ADC"),
 )
-TODAS = 0x0F
+TODAS = 0x1F
+
+# Captura de la orden 'm' en la demostración (como el firmware)
+N_CAPTURA = 200
+PERIODO_DISPARO_US = 100
+VDD_DEMO = 3.70
+OFFSET_ADC_DEMO = 3         # LSB; lo mide y lo resta el autocero
 
 
 # --------------------------------------------------------------------------
@@ -84,6 +96,7 @@ def interpretar(linea):
     tipo: "muestra" (t_ms, Ip, Qp, I1, Q1) en ms y mV
           "bloque"  dict con V, fase, d, I0, Q0, theta, vcc, G, banderas, etapas
           "punto"   (I1, Q1) del volcado de la traza (orden 'p')
+          "captura" tupla de códigos del ADC de la captura (orden 'm')
           "texto"   comentario o respuesta (líneas con '#')
     """
     linea = linea.strip()
@@ -109,6 +122,8 @@ def interpretar(linea):
         if linea.startswith("P,"):
             _, i1, q1 = linea.split(",")
             return ("punto", (int(i1) / 1000, int(q1) / 1000))
+        if linea.startswith("M,"):
+            return ("captura", tuple(int(x) for x in linea[2:].split(",")))
     except ValueError:
         return None
     return None
@@ -243,7 +258,23 @@ class FuenteDemo:
             escala *= 3.653 / 3.7
         return ip * escala, qp * escala
 
-    def _atender_orden(self, o):
+    def _vcc_mv(self):
+        # sin autocero el offset del ADC (+3 LSB) se cuela en VCC_A y en el FVR
+        return 3653 if self._activa(0x10) else 3646
+
+    def _captura(self, t):
+        """Orden 'm': N_CAPTURA códigos de I_OUT, uno cada 100 µs."""
+        self.cola.put(f"# m: captura de {N_CAPTURA} conversiones de I_OUT, una cada {PERIODO_DISPARO_US} us")
+        codigos = []
+        for k in range(N_CAPTURA):
+            ip, _ = self._senal(t + k * PERIODO_DISPARO_US / 1e6)
+            v = 3.653 / 2 - ip * self.G_TARJETA / 1000 * (3.653 / 3.7)
+            codigos.append(round(v / VDD_DEMO * 4095 + random.gauss(0, 0.4)) + OFFSET_ADC_DEMO)
+        for k in range(0, N_CAPTURA, 10):
+            self.cola.put("M," + ",".join(str(c) for c in codigos[k:k + 10]))
+        self.cola.put("# fin captura")
+
+    def _atender_orden(self, o, t):
         nombres = {"z": "fijar cero", "x": "borrar cero", "c": "calibrar theta",
                    "t": "theta = 0", "b": "borrar traza"}
         etapa_de = {"z": 0x01, "x": 0x01, "c": 0x02, "t": 0x02}
@@ -254,9 +285,11 @@ class FuenteDemo:
         elif o in ("2", "1", "0"):
             self.G = {"2": 2, "1": 11, "0": 101}[o]
             self.cola.put(self._configuracion())
-        elif o in ("Z", "T", "G", "N"):
+        elif o in ("Z", "T", "G", "N", "A"):
             self.etapas ^= next(bit for bit, orden, _, _ in ETAPAS if orden == o)
             self.cola.put(self._configuracion())
+        elif o == "m":
+            self._captura(t)
         elif o in "?h":
             self.cola.put("# P2 IQ - demostracion")
             self.cola.put(self._configuracion())
@@ -272,7 +305,7 @@ class FuenteDemo:
             if espera > 0:
                 time.sleep(espera)
             while not self.ordenes.empty():
-                self._atender_orden(self.ordenes.get())
+                self._atender_orden(self.ordenes.get(), n * PERIODO_S)
             ip, qp = self._senal(n * PERIODO_S)
             i1, q1 = self._cero_y_rotacion(ip, qp)
             self.cola.put(f"{n * 10},{round(ip * 1000)},{round(qp * 1000)},"
@@ -301,8 +334,8 @@ class FuenteDemo:
             v = math.hypot(mi1, mq1)
             self.cola.put(f"B,{round(v * 1000)},{round(math.degrees(math.atan2(mq1, mi1)) * 100)},"
                           f"{round(v / MV_POR_1E4 * 1000)},{round(self.I0 * 1000)},"
-                          f"{round(self.Q0 * 1000)},{round(self.theta * 100)},3653,{self.G},0,"
-                          f"{self.etapas}")
+                          f"{round(self.Q0 * 1000)},{round(self.theta * 100)},{self._vcc_mv()},"
+                          f"{self.G},0,{self.etapas}")
 
     def _cero_y_rotacion(self, ip, qp):
         if self._activa(0x01):
@@ -382,6 +415,7 @@ class Panel:
         self.r_escala = 0.0
         self.sincronizando = False
         self.punto_volcado = 0
+        self.captura = []
 
         self.fig = plt.figure("P2 IQ - PIC16F18426", figsize=(14, 8.2))
         self.fig.patch.set_facecolor("white")
@@ -438,7 +472,7 @@ class Panel:
         ax_g.set_title("Ganancia DC", fontsize=9)
         self.radio_g = RadioButtons(ax_g, ("×2", "×11", "×101"))
         self.radio_g.on_clicked(self._ganancia)
-        ax_e = self.fig.add_axes([0.385, 0.012, 0.105, 0.145])
+        ax_e = self.fig.add_axes([0.385, 0.008, 0.11, 0.17])
         ax_e.set_title("Etapas activas", fontsize=9)
         self.check_etapas = CheckButtons(ax_e, [nombre for _, _, _, nombre in ETAPAS],
                                          [True] * len(ETAPAS))
@@ -529,11 +563,17 @@ class Panel:
                 self._sincronizar(g=valor["G"], etapas=valor["etapas"])
             elif tipo == "punto":
                 self.punto_volcado += 1
+            elif tipo == "captura":
+                self.captura.extend(valor)
             else:
                 print(valor)
                 if valor.startswith("# fin traza"):
                     print(f"  (recibidos {self.punto_volcado} puntos de la traza del PIC)")
                     self.punto_volcado = 0
+                if valor.startswith("# m: captura"):
+                    self.captura = []
+                if valor.startswith("# fin captura"):
+                    print("  " + resumen_captura(self.captura))
                 config = interpretar_configuracion(valor)
                 if config:
                     self.configuracion = valor
@@ -626,6 +666,16 @@ class Panel:
 
 
 # --------------------------------------------------------------------------
+
+def resumen_captura(codigos):
+    """Media y desviación típica (LSB) de los códigos de una captura 'm'."""
+    if len(codigos) < 2:
+        return f"captura: {len(codigos)} códigos"
+    media = sum(codigos) / len(codigos)
+    sigma = math.sqrt(sum((c - media) ** 2 for c in codigos) / (len(codigos) - 1))
+    return (f"captura: {len(codigos)} códigos, media {media:.2f}, desviación {sigma:.2f} LSB, "
+            f"pico a pico {max(codigos) - min(codigos)} LSB  (espectro y jitter: medir_jitter.py)")
+
 
 def liberar_teclas(plt):
     """Quita los atajos de matplotlib que chocan con las órdenes (s, g, c...)."""

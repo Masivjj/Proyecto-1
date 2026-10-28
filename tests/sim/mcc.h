@@ -12,33 +12,39 @@
 #include <stdint.h>
 
 /* Registros (solo los campos que usa la aplicacion) */
-typedef uint8_t adcc_channel_t;
-typedef struct { unsigned ADCRS : 3; unsigned ADMD : 3; } sim_adcon2_t;
-typedef struct { unsigned ADTMD : 3; } sim_adcon3_t;
-typedef struct { unsigned ADTIF : 1; } sim_pir1_t;
+typedef struct { unsigned ADCONT : 1; unsigned ADCS : 1; } sim_adcon0_t;
+typedef struct { unsigned ADMD : 3; } sim_adcon2_t;
+typedef struct { unsigned ADIF : 1; } sim_pir1_t;
+typedef struct { unsigned ADIE : 1; } sim_pie1_t;
+typedef struct { unsigned ANSA1 : 1; } sim_ansela_t;
+typedef struct { unsigned TRISA1 : 1; } sim_trisa_t;
+typedef struct { unsigned SLRA1 : 1; } sim_slrcona_t;
 typedef struct { unsigned GIE : 1; unsigned PEIE : 1; } sim_intcon_t;
 typedef struct { unsigned NVMREGS : 1; unsigned WREN : 1; unsigned WR : 1; unsigned RD : 1; } sim_nvmcon1_t;
 
+extern sim_adcon0_t ADCON0bits;
 extern sim_adcon2_t ADCON2bits;
-extern sim_adcon3_t ADCON3bits;
 extern volatile sim_pir1_t PIR1bits;
+extern sim_pie1_t PIE1bits;
+extern sim_ansela_t ANSELAbits;
+extern sim_trisa_t TRISAbits;
+extern sim_slrcona_t SLRCONAbits;
+extern uint8_t ADPCH, ADACT, RA1PPS;
 extern sim_intcon_t INTCONbits;
 extern volatile sim_nvmcon1_t NVMCON1bits;
 extern uint8_t NVMADRH, NVMADRL, NVMDATL, NVMCON2;
 
 /* Drivers de MCC */
 void SYSTEM_Initialize(void);
-void ADCC_StartConversion(adcc_channel_t canal);
-uint16_t ADCC_GetFilterValue(void);
-void ADCC_SetRepeatCount(uint8_t repeticiones);
+uint16_t ADCC_GetConversionResult(void);
+void ADCC_SetADIInterruptHandler(void (*manejador)(void));
 bool FVR_IsOutputReady(void);
 uint8_t DATAEE_ReadByte(uint16_t direccion);
 void EUSART1_Write(uint8_t dato);
 bool EUSART1_is_rx_ready(void);
 uint8_t EUSART1_Read(void);
-void TMR2_SetInterruptHandler(void (*manejador)(void));
 
-/* Interrupciones: cada vez que main() las deshabilita pasa el tiempo */
+/* Interrupciones: cada vez que el firmware las deshabilita pasa el tiempo */
 void sim_gie(int habilitar);
 #define INTERRUPT_GlobalInterruptEnable()       sim_gie(1)
 #define INTERRUPT_GlobalInterruptDisable()      sim_gie(0)

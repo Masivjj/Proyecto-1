@@ -13,8 +13,9 @@
  *   P10 indicadores del bloque: |V|, Fase y d estimada
  * La traza del plano polar (P9) esta en traza.c.
  *
- * Las etapas de cero, theta, ganancia y normalizacion a VCC_A se activan y
- * desactivan en marcha con iq_fijar_etapas() (ordenes Z, T, G y N por UART).
+ * Las etapas de cero, theta, ganancia, normalizacion a VCC_A y autocero
+ * del ADC se activan y desactivan en marcha con iq_fijar_etapas() (ordenes
+ * Z, T, G, N y A por UART).
  *
  * El modulo no toca el hardware: compila igual con XC8 y con gcc, y se
  * comprueba en el PC con los vectores de prueba de la seccion 9
@@ -35,6 +36,7 @@ typedef struct {
     uint16_t cR;        /* V_REF  (J805.2) */
     uint16_t cV;        /* VCC_A  (J805.5) */
     uint16_t cF;        /* FVR de 1.024 V (canal interno); 0 si no se mide */
+    uint16_t cZ;        /* AVSS (0 V, canal interno): offset del ADC para el autocero */
 } iq_codigos_t;
 
 /* Resultado de cada muestra (100 por segundo) */
@@ -64,7 +66,9 @@ typedef struct {
 #define IQ_ETAPA_GANANCIA       0x04u   /* P2: dividir por G (desactivada: G = 1)           */
 #define IQ_ETAPA_NORMALIZACION  0x08u   /* P1-P2: normalizar a VCC_A = 3.7 V (desactivada:
                                          * voltios absolutos medidos con el FVR)            */
-#define IQ_ETAPAS_TODAS         0x0Fu
+#define IQ_ETAPA_AUTOCERO       0x10u   /* restar a todos los canales el offset del ADC
+                                         * medido en AVSS (cZ)                              */
+#define IQ_ETAPAS_TODAS         0x1Fu
 
 /* Eventos: equivalen a los botones "latch" del VI. Cada uno vale un bloque y
  * se aplica al cerrar el bloque en curso. */
@@ -81,7 +85,7 @@ typedef struct {
 #define IQ_FL_SAT_Q         0x04u   /* Q_OUT a menos de ~50 mV de un riel de VCC_A      */
 #define IQ_FL_SAT_VCC       0x08u   /* VCC_A >= VDD: la normalizacion no es fiable      */
 #define IQ_FL_SIN_FVR       0x10u   /* sin lectura valida del FVR: VCC_A en V desconocido */
-#define IQ_FL_RETRASO       0x20u   /* (main.c) se descartaron muestras por retraso     */
+#define IQ_FL_RETRASO       0x20u   /* (main.c) se descartaron tramas: cola llena       */
 #define IQ_FL_ALARMA        (IQ_FL_VCC_FUERA | IQ_FL_SAT_I | IQ_FL_SAT_Q | IQ_FL_SAT_VCC)
 
 /* Pone el estado como al arrancar el VI: I0 = Q0 = 0, theta = 0,
@@ -96,6 +100,10 @@ uint8_t iq_ganancia(void);
  * Para alternar una: iq_fijar_etapas(iq_etapas() ^ IQ_ETAPA_CERO). */
 uint8_t iq_fijar_etapas(uint8_t activas);
 uint8_t iq_etapas(void);
+
+/* Offset del ADC (LSB) medido en AVSS en la ultima muestra. Un offset
+ * negativo se lee como 0: el ADC no da codigos por debajo de 0. */
+float   iq_offset_lsb(void);
 
 void    iq_fijar_calibracion(float i0, float q0, float theta_grados);
 void    iq_leer_calibracion(float *i0, float *q0, float *theta_grados);

@@ -13,8 +13,8 @@
  *    anterior; en el primer bloque, con la primera muestra.
  *  - La normalizacion ratiometrica usa el VCC_A de cada muestra (10.4).
  *
- * Las etapas cero, theta, ganancia y normalizacion se pueden desactivar en
- * marcha (iq_fijar_etapas). Desactivar una etapa no borra lo que tenia
+ * Las etapas cero, theta, ganancia, normalizacion y autocero se pueden
+ * desactivar en marcha (iq_fijar_etapas). Desactivar una etapa no borra lo que tenia
  * guardado (I0, Q0, theta, G): al volver a activarla se aplica de nuevo.
  */
 #include <math.h>
@@ -38,6 +38,7 @@ typedef char iq_float_de_32_bits[(sizeof(float) == 4u) ? 1 : -1];
 /* ---- Controles ---- */
 static uint8_t ganancia;            /* G: divisor de la etapa DC          */
 static uint8_t etapas;              /* IQ_ETAPA_x activas                 */
+static uint16_t ultimo_cz;          /* suma de AVSS de la ultima muestra  */
 
 /* ---- Estado persistente (shift registers del VI) ---- */
 static float   I0, Q0;              /* cero (mV)                          */
@@ -139,6 +140,11 @@ uint8_t iq_etapas(void)
     return etapas;
 }
 
+float iq_offset_lsb(void)
+{
+    return (float)ultimo_cz / (float)N_SOBREMUESTREO;
+}
+
 void iq_fijar_calibracion(float i0, float q0, float theta_grados)
 {
     I0 = i0;
@@ -167,19 +173,34 @@ static bool saturada(uint16_t cx, uint32_t cv)
     return (x < cv * 3u) || (x > cv * 197u);
 }
 
+/* a - b sin bajar de 0 */
+static uint16_t restar(uint16_t a, uint16_t b)
+{
+    return (a > b) ? (uint16_t)(a - b) : 0u;
+}
+
 /* P1-P3: de los codigos del ADC a las senales procesadas (mV). */
 static void escalar(const iq_codigos_t *c, iq_muestra_t *m)
 {
-    uint32_t cv = (uint32_t)c->cV * DIVISOR_VCCA;  /* VCC_A en cuentas de I_OUT */
-    bool fvr_ok = (c->cF >= CF_MINIMO) && (c->cF <= CF_MAXIMO);
+    /* Autocero: el offset del ADC (lectura de AVSS) se resta de todos los
+     * canales. En I - V_REF y Q - V_REF ya se cancela; donde importa es en
+     * VCC_A y el FVR, que se usan como valores absolutos. */
+    uint16_t z = ((etapas & IQ_ETAPA_AUTOCERO) != 0u) ? c->cZ : 0u;
+    uint16_t cI = restar(c->cI, z);
+    uint16_t cQ = restar(c->cQ, z);
+    uint16_t cR = restar(c->cR, z);
+    uint16_t cF = restar(c->cF, z);
+    uint32_t cv = (uint32_t)restar(c->cV, z) * DIVISOR_VCCA;  /* VCC_A en cuentas de I_OUT */
+    bool fvr_ok = (cF >= CF_MINIMO) && (cF <= CF_MAXIMO);
     bool normalizar = ((etapas & IQ_ETAPA_NORMALIZACION) != 0u);
     float divisor = ((etapas & IQ_ETAPA_GANANCIA) != 0u) ? (float)ganancia : 1.0f;
     float k;
 
-    if (saturada(c->cI, cv)) {
+    ultimo_cz = c->cZ;
+    if (saturada(cI, cv)) {
         banderas_blk |= IQ_FL_SAT_I;
     }
-    if (saturada(c->cQ, cv)) {
+    if (saturada(cQ, cv)) {
         banderas_blk |= IQ_FL_SAT_Q;
     }
     if (c->cV >= CV_SATURADO) {
@@ -189,9 +210,9 @@ static void escalar(const iq_codigos_t *c, iq_muestra_t *m)
     /* P1: VCC_A [V] = 1.024 cV / cF (VDD se cancela) */
     if (fvr_ok) {
         suma_cV += cv;
-        suma_cF += c->cF;
+        suma_cF += cF;
         if (primera_muestra) {
-            vcc_valida = (FVR_V * (float)cv > VCC_UMBRAL_V * (float)c->cF);
+            vcc_valida = (FVR_V * (float)cv > VCC_UMBRAL_V * (float)cF);
         }
     } else {
 #if USAR_FVR
@@ -216,7 +237,7 @@ static void escalar(const iq_codigos_t *c, iq_muestra_t *m)
             /* Sin normalizar (etapa desactivada o VCC_A fuera de rango, donde
              * LabVIEW usa Vused = 3.7 V): k = 1000 / G sobre los voltios
              * crudos, que valen (cX - cR) * 1.024 / cF. */
-            k = (FVR_V * 1000.0f) / ((float)c->cF * divisor);
+            k = (FVR_V * 1000.0f) / ((float)cF * divisor);
         } else {
             k = 0.0f;   /* sin VCC_A ni FVR no hay escala posible */
         }
@@ -225,8 +246,8 @@ static void escalar(const iq_codigos_t *c, iq_muestra_t *m)
     /* P3. La tarjeta fabricada entrega I con el signo invertido (pines 12/13
      * del 74HC4053 cruzados, seccion 1.3): se corrige siempre con kI = -k.
      * Si se arregla la tarjeta, quitar el signo menos de la linea de Ip. */
-    m->Ip = -k * (float)((int32_t)c->cI - (int32_t)c->cR);
-    m->Qp = k * (float)((int32_t)c->cQ - (int32_t)c->cR);
+    m->Ip = -k * (float)((int32_t)cI - (int32_t)cR);
+    m->Qp = k * (float)((int32_t)cQ - (int32_t)cR);
 }
 
 /* Cierre del bloque: P1 (media de VCC_A), P4, P5, P7 y P10. */

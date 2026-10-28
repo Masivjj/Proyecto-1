@@ -2,7 +2,8 @@
 #
 #   make        pruebas unitarias + simulacion del firmware + programa del PC
 #   make test   solo las pruebas unitarias (vectores de la seccion 9.1)
-#   make pc     pruebas del interprete de lineas de pc/plano_polar.py
+#   make pc     pruebas de los programas del PC: interprete de lineas de
+#               pc/plano_polar.py y analisis de pc/medir_jitter.py (numpy)
 #   make sim    simula el firmware completo (main.c y app/*.c sin cambios)
 #               con un hardware falso y comprueba su salida por UART
 #   make clean  borra lo compilado
@@ -44,6 +45,7 @@ sim: sim/sim.c sim/mcc.h verificar_sim.py $(FW)/main.c $(wildcard $(APP)/*)
 
 pc:
 	python3 test_plano_polar.py
+	python3 test_medir_jitter.py
 
 clean:
 	rm -rf test_iq_proc build

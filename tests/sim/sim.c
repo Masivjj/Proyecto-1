@@ -1,15 +1,19 @@
 /*
  * sim.c - Simula el firmware del PIC en el PC.
  *
- * Compila main.c y los .c de app/ SIN CAMBIOS contra un mcc.h falso (sim/mcc.h) e
- * implementa aqui un "hardware" simulado:
- *   - ADC: la tarjeta P2 con una senal sintetica (cero del puente, una
- *     fisura a 60 grados, un lift-off a 20 grados y algo de ruido), con VDD,
- *     VCC_A, V_REF y FVR, y la inversion de signo del canal I
+ * Compila main.c y los .c de app/ SIN CAMBIOS contra un mcc.h falso
+ * (sim/mcc.h) e implementa aqui un "hardware" simulado:
+ *   - PWM6 + ADC: cada 100 us (un disparo) se convierte el canal que la
+ *     interrupcion dejo en ADPCH y se llama a esa interrupcion, como en el PIC.
+ *     El ADC tiene un offset de +3 LSB (lo mide el autocero en AVSS).
+ *   - tarjeta P2: senal sintetica (cero del puente, una fisura a 60 grados,
+ *     un lift-off a 20 grados y algo de ruido) con VDD, VCC_A, V_REF, FVR y
+ *     la inversion de signo del canal I
  *   - UART: lo que envia el PIC sale por stdout; las ordenes siguen un guion
  *   - EEPROM: 256 bytes que se cargan y guardan en un archivo
- *   - TMR2: un tick de 10 ms cada dos vueltas del lazo principal, con dos
- *     rafagas que simulan un lazo lento (3 ticks a la vez y 15 a la vez)
+ *   - lazo principal: cada vez que deshabilita las interrupciones pasan 2.5 ms;
+ *     en t = 3 s se para 30 ms (la cola de tramas lo absorbe) y en t = 6.5 s,
+ *     150 ms (la cola se llena y se pierden tramas)
  *   - pulsadores: una pulsacion de 150 ms y un rebote de 20 ms
  *
  * Uso: sim <segundos> <archivo_eeprom>     (ver tests/Makefile, "make sim")
@@ -22,11 +26,18 @@
 #include "app/app_config.h"
 
 #define PI 3.14159265358979
+#define OFFSET_ADC          3           /* LSB, en todas las conversiones */
+#define DISPAROS_POR_VUELTA 25          /* 2.5 ms cada vez que main deshabilita GIE */
 
 /* ---- Registros simulados ---- */
+sim_adcon0_t ADCON0bits;
 sim_adcon2_t ADCON2bits;
-sim_adcon3_t ADCON3bits;
 volatile sim_pir1_t PIR1bits;
+sim_pie1_t PIE1bits;
+sim_ansela_t ANSELAbits;
+sim_trisa_t TRISAbits;
+sim_slrcona_t SLRCONAbits;
+uint8_t ADPCH, ADACT, RA1PPS;
 sim_intcon_t INTCONbits;
 volatile sim_nvmcon1_t NVMCON1bits;
 uint8_t NVMADRH, NVMADRL, NVMDATL, NVMCON2;
@@ -50,14 +61,17 @@ static const struct {
     {5.80, "1"},    /* ganancia x11 ...                     */
     {5.90, "2"},    /* ... y de vuelta a x2                 */
     {6.20, "q"},    /* orden desconocida                    */
+    {7.50, "m"},    /* captura para medir el jitter         */
     {9.00, "b"},    /* borrar traza                         */
     {9.30, "Z"},    /* desactivar la etapa de cero ...      */
     {9.45, "z"},    /* ... y "Fijar cero" se ignora         */
     {9.60, "T"},    /* desactivar la etapa de theta         */
+    {9.70, "A"},    /* desactivar el autocero               */
+    {9.80, "?"},    /* estado: muestras perdidas y offset   */
 };
 
-static void (*manejador_tmr2)(void);
-static long n_tick, max_ticks;
+static void (*manejador_adc)(void);
+static long n_disparo, max_disparos;
 static uint8_t eeprom[256];
 static const char *archivo_eeprom;
 static uint16_t resultado_adc;
@@ -89,10 +103,10 @@ static void senal(double t, double *ip, double *qp)
     *qp = q + 0.2 * ruido();
 }
 
-/* Suma de N_SOBREMUESTREO conversiones de la tension v */
-static uint16_t codigo(double v)
+/* Una conversion de 12 bits de la tension v, con el offset del ADC */
+static uint16_t convertir(double v)
 {
-    double c = floor(v / VDD * ADC_CUENTAS + 0.5);
+    double c = floor(v / VDD * ADC_CUENTAS + 0.5) + OFFSET_ADC;
 
     if (c < 0) {
         c = 0;
@@ -100,12 +114,12 @@ static uint16_t codigo(double v)
     if (c > ADC_CUENTAS) {
         c = ADC_CUENTAS;
     }
-    return (uint16_t)(c * N_SOBREMUESTREO);
+    return (uint16_t)c;
 }
 
 static void fallo(const char *motivo)
 {
-    fprintf(stderr, "sim: %s (tick %ld)\n", motivo, n_tick);
+    fprintf(stderr, "sim: %s (disparo %ld)\n", motivo, n_disparo);
     exit(2);
 }
 
@@ -115,38 +129,14 @@ void SYSTEM_Initialize(void)
 {
 }
 
-void ADCC_StartConversion(adcc_channel_t canal)
-{
-    double ip, qp, iraw, qraw;
-
-    if (ADCON2bits.ADMD != 3 || ADCON2bits.ADCRS != 0 || ADCON3bits.ADTMD != 7) {
-        fallo("ADCC sin Burst Average / ADCRS = 0 / ADTMD = siempre");
-    }
-    senal(n_tick * (PERIODO_MS / 1000.0), &ip, &qp);
-    /* La tarjeta invierte I; la etapa DC multiplica por G; todo escala con VCC_A */
-    iraw = -ip * G_TARJETA / 1000.0 * (VCC_A / 3.7);
-    qraw = qp * G_TARJETA / 1000.0 * (VCC_A / 3.7);
-    switch (canal) {
-    case 0x10: resultado_adc = codigo(V_REF + iraw); break;
-    case 0x11: resultado_adc = codigo(V_REF + qraw); break;
-    case 0x12: resultado_adc = codigo(V_REF); break;
-    case 0x13: resultado_adc = codigo(VCC_A / DIVISOR_VCCA); break;
-    case 0x3E: resultado_adc = codigo(1.024); break;
-    default: fallo("canal del ADC desconocido");
-    }
-    PIR1bits.ADTIF = 1;
-}
-
-uint16_t ADCC_GetFilterValue(void)
+uint16_t ADCC_GetConversionResult(void)
 {
     return resultado_adc;
 }
 
-void ADCC_SetRepeatCount(uint8_t repeticiones)
+void ADCC_SetADIInterruptHandler(void (*manejador)(void))
 {
-    if (repeticiones != N_SOBREMUESTREO) {
-        fallo("ADRPT distinto de N_SOBREMUESTREO");
-    }
+    manejador_adc = manejador;
 }
 
 bool FVR_IsOutputReady(void)
@@ -180,14 +170,9 @@ void EUSART1_Write(uint8_t dato)
     putchar(dato);
 }
 
-void TMR2_SetInterruptHandler(void (*manejador)(void))
-{
-    manejador_tmr2 = manejador;
-}
-
 unsigned sim_boton(int n)
 {
-    double t = n_tick * (PERIODO_MS / 1000.0);
+    double t = n_disparo * (PERIODO_DISPARO_US / 1e6);
 
     if (n == 0) {
         return !(t >= 7.00 && t < 7.15);    /* "Fijar cero": 150 ms pulsado */
@@ -197,35 +182,58 @@ unsigned sim_boton(int n)
 
 /* ---- Paso del tiempo ---- */
 
-static void un_tick(void)
+/* Un flanco del PWM6: conversion del canal en ADPCH e interrupcion ADIF */
+static void un_disparo(void)
 {
+    double t = n_disparo * (PERIODO_DISPARO_US / 1e6), ip, qp, v;
+    long trama;
     size_t k;
 
-    n_tick++;
-    for (k = 0; k < sizeof guion / sizeof guion[0]; k++) {
-        if ((long)(guion[k].t * 100 + 0.5) == n_tick) {
-            size_t l = strlen(guion[k].orden);
-            memcpy(rx + rx_n, guion[k].orden, l);
-            rx_n += (int)l;
+    if (ADACT != 0x0E || ADCON2bits.ADMD != 0 || ADCON0bits.ADCS != 0 || ADCON0bits.ADCONT != 0) {
+        fallo("ADC sin modo basico / disparo PWM6_out / reloj FOSC");
+    }
+    if (!PIE1bits.ADIE || manejador_adc == NULL) {
+        fallo("interrupcion del ADC sin habilitar");
+    }
+    senal(t, &ip, &qp);
+    switch (ADPCH) {
+    /* La tarjeta invierte I; la etapa DC multiplica por G; todo escala con VCC_A */
+    case 0x10: v = V_REF - ip * G_TARJETA / 1000.0 * (VCC_A / 3.7); break;
+    case 0x11: v = V_REF + qp * G_TARJETA / 1000.0 * (VCC_A / 3.7); break;
+    case 0x12: v = V_REF; break;
+    case 0x13: v = VCC_A / DIVISOR_VCCA; break;
+    case 0x3E: v = 1.024; break;
+    case 0x3B: v = 0.0; break;
+    default: fallo("canal del ADC desconocido"); v = 0.0;
+    }
+    resultado_adc = convertir(v);
+    PIR1bits.ADIF = 0;                      /* lo hace ADCC_ISR() */
+    manejador_adc();
+    n_disparo++;
+
+    if (n_disparo % DISPAROS_POR_TRAMA == 0) {
+        trama = n_disparo / DISPAROS_POR_TRAMA;
+        for (k = 0; k < sizeof guion / sizeof guion[0]; k++) {
+            if ((long)(guion[k].t * 1000 / PERIODO_MS + 0.5) == trama) {
+                size_t l = strlen(guion[k].orden);
+                memcpy(rx + rx_n, guion[k].orden, l);
+                rx_n += (int)l;
+            }
         }
     }
-    manejador_tmr2();
 }
 
 void sim_gie(int habilitar)
 {
-    static int vuelta;
-    int rafaga, r;
+    static int parado_3s, parado_6s;
+    long disparos = DISPAROS_POR_VUELTA, d;
     FILE *f;
 
     INTCONbits.GIE = (unsigned)habilitar;
-    if (habilitar || manejador_tmr2 == NULL) {
+    if (habilitar || manejador_adc == NULL) {
         return;
     }
-    if ((++vuelta & 1) == 0) {
-        return;                             /* dos vueltas del lazo por tick */
-    }
-    /* La escritura de EEPROM en curso termina antes del siguiente tick */
+    /* La escritura de EEPROM en curso termina antes de la vuelta siguiente */
     if (NVMCON1bits.WR) {
         if (!NVMCON1bits.WREN || !NVMCON1bits.NVMREGS || NVMCON2 != 0xAA) {
             fallo("secuencia de escritura de la EEPROM incorrecta");
@@ -233,7 +241,7 @@ void sim_gie(int habilitar)
         eeprom[((NVMADRH << 8) | NVMADRL) & 0xFF] = NVMDATL;
         NVMCON1bits.WR = 0;
     }
-    if (n_tick >= max_ticks) {
+    if (n_disparo >= max_disparos) {
         f = fopen(archivo_eeprom, "wb");
         if (f != NULL) {
             fwrite(eeprom, 1, sizeof eeprom, f);
@@ -241,10 +249,17 @@ void sim_gie(int habilitar)
         }
         exit(0);
     }
-    /* Lazo lento: en t = 3.00 s llegan 3 ticks juntos y en t = 6.50 s, 15 */
-    rafaga = (n_tick == 300) ? 3 : (n_tick == 650) ? 15 : 1;
-    for (r = 0; r < rafaga; r++) {
-        un_tick();
+    /* Lazo lento: el muestreo sigue mientras main esta parado */
+    if (!parado_3s && n_disparo >= 30000) {
+        parado_3s = 1;
+        disparos += 3 * DISPAROS_POR_TRAMA;
+    }
+    if (!parado_6s && n_disparo >= 65000) {
+        parado_6s = 1;
+        disparos += 15 * DISPAROS_POR_TRAMA;
+    }
+    for (d = 0; d < disparos; d++) {
+        un_disparo();
     }
 }
 
@@ -258,7 +273,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "uso: %s <segundos> <archivo_eeprom>\n", argv[0]);
         return 1;
     }
-    max_ticks = (long)(atof(argv[1]) * 100);
+    max_disparos = (long)(atof(argv[1]) * 1e6 / PERIODO_DISPARO_US);
     archivo_eeprom = argv[2];
     memset(eeprom, 0xFF, sizeof eeprom);    /* EEPROM borrada */
     f = fopen(archivo_eeprom, "rb");

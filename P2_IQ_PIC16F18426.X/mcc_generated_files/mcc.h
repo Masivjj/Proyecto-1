@@ -22,6 +22,7 @@
 #include "fvr.h"
 #include "memory.h"
 #include "tmr2.h"
+#include "pwm6.h"
 #include "adcc.h"
 #include "eusart1.h"
 

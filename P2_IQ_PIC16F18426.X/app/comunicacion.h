@@ -6,15 +6,18 @@
  *   B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas
  *                                                      una por bloque (10/s)
  *   P,I1_uV,Q1_uV                                      volcado de la traza ('p')
+ *   M,c1,c2,...,c10                                    captura ('m'): codigos de
+ *                                                      12 bits de I_OUT
  *   # ...                                              comentarios y respuestas
  *
  * Ordenes de un caracter que recibe:
  *   z fijar cero        x borrar cero      c calibrar theta    t theta = 0
  *   b borrar traza      2 / 1 / 0 ganancia x2 / x11 / x101
  *   p volcar la traza   ? estado y ayuda
- *   Z / T / G / N activar o desactivar la etapa de cero / theta / ganancia /
- *                 normalizacion a VCC_A (las ordenes de una etapa desactivada
- *                 se contestan como ignoradas)
+ *   m capturar N_CAPTURA conversiones seguidas de I_OUT (medida del jitter)
+ *   Z / T / G / N / A activar o desactivar la etapa de cero / theta /
+ *                 ganancia / normalizacion a VCC_A / autocero (las ordenes de
+ *                 una etapa desactivada se contestan como ignoradas)
  */
 #ifndef COMUNICACION_H
 #define COMUNICACION_H

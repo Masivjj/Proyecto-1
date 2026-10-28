@@ -9,6 +9,7 @@
  */
 #include "../mcc_generated_files/mcc.h"
 #include "comunicacion.h"
+#include "adquisicion.h"
 #include "ajustes.h"
 #include "formato.h"
 #include "traza.h"
@@ -19,10 +20,13 @@
 #define MILESIMAS       1000.0f     /* d (x1e-4) -> milesimas        */
 
 #define ESTADO_LINEAS   8u
+#define CODIGOS_POR_LINEA 10u       /* captura: codigos en cada linea M,...   */
 
 static uint8_t estado_paso;         /* proxima linea del estado (0 = ninguna) */
 static uint8_t volcado_total;       /* puntos a volcar (0 = sin volcado)      */
 static uint8_t volcado_n;           /* puntos ya enviados                     */
+static uint16_t *captura;           /* buffer de la captura en curso          */
+static uint16_t captura_enviados;
 
 /* ---- Salida ---- */
 
@@ -72,6 +76,15 @@ static void tx_fin(void)
     tx_car('\n');
 }
 
+/* v / 100 con dos decimales (v >= 0) */
+static void tx_centesimas(uint32_t v)
+{
+    tx_u32(v / 100u);
+    tx_car('.');
+    tx_car((char)('0' + (uint8_t)((v / 10u) % 10u)));
+    tx_car((char)('0' + (uint8_t)(v % 10u)));
+}
+
 /* " nombre=ON" o " nombre=OFF" segun la etapa este activa */
 static void tx_etapa(const char *nombre, uint8_t etapa)
 {
@@ -91,6 +104,7 @@ static void tx_configuracion(void)
     tx_etapa("theta", IQ_ETAPA_THETA);
     tx_etapa("ganancia", IQ_ETAPA_GANANCIA);
     tx_etapa("norm", IQ_ETAPA_NORMALIZACION);
+    tx_etapa("autocero", IQ_ETAPA_AUTOCERO);
     tx_texto(" I0_uV=");
     tx_i32(fmt_a_entero(i0, UV_POR_MV));
     tx_texto(" Q0_uV=");
@@ -115,6 +129,9 @@ static void tx_linea_estado(uint8_t paso, uint32_t muestras_perdidas)
         tx_u32(traza_puntos());
         tx_texto("  muestras perdidas: ");
         tx_u32(muestras_perdidas);
+        tx_texto("  offset ADC (AVSS): ");
+        tx_centesimas((uint32_t)fmt_a_entero(iq_offset_lsb(), 100.0f));
+        tx_texto(" LSB");
         tx_fin();
         break;
     case 4u:
@@ -127,10 +144,10 @@ static void tx_linea_estado(uint8_t paso, uint32_t muestras_perdidas)
         tx_texto("# ordenes: z=fijar cero x=borrar cero c=calibrar theta t=theta 0 b=borrar traza\r\n");
         break;
     case 7u:
-        tx_texto("#          2/1/0=ganancia x2/x11/x101 p=volcar traza ?=estado\r\n");
+        tx_texto("#          2/1/0=ganancia x2/x11/x101 p=volcar traza m=captura (jitter) ?=estado\r\n");
         break;
     default:
-        tx_texto("# etapas (activar/desactivar): Z=cero T=theta G=ganancia N=normalizacion VCC_A\r\n");
+        tx_texto("# etapas (activar/desactivar): Z=cero T=theta G=ganancia N=normalizacion A=autocero\r\n");
         break;
     }
 }
@@ -256,6 +273,42 @@ static void volcar_punto(void)
     }
 }
 
+/* Orden 'm': captura N_CAPTURA conversiones seguidas de I_OUT (una por
+ * disparo del PWM6) para medir el jitter con pc/medir_jitter.py */
+static void iniciar_captura(void)
+{
+    if (adq_capturando() || (volcado_total != 0u)) {
+        tx_texto("# m: espere a que termine la captura o el volcado en curso\r\n");
+        return;
+    }
+    captura = traza_prestar_memoria();      /* vacia la traza */
+    captura_enviados = 0u;
+    (void)adq_pedir_captura(captura, N_CAPTURA);
+    tx_texto("# m: captura de ");
+    tx_u32(N_CAPTURA);
+    tx_texto(" conversiones de I_OUT, una cada ");
+    tx_u32(PERIODO_DISPARO_US);
+    tx_texto(" us\r\n");
+}
+
+/* Envia la captura terminada, CODIGOS_POR_LINEA codigos por llamada */
+static void enviar_captura(void)
+{
+    uint8_t k;
+
+    tx_car('M');
+    for (k = 0u; (k < CODIGOS_POR_LINEA) && (captura_enviados < N_CAPTURA); k++) {
+        tx_car(',');
+        tx_u32(captura[captura_enviados++]);
+    }
+    tx_fin();
+    if (captura_enviados >= N_CAPTURA) {
+        adq_liberar_captura();
+        traza_borrar();
+        tx_texto("# fin captura\r\n");
+    }
+}
+
 static void atender_orden(char ch)
 {
     switch (ch) {
@@ -296,10 +349,18 @@ static void atender_orden(char ch)
     case 'N':
         alternar_etapa(IQ_ETAPA_NORMALIZACION);
         break;
+    case 'A':
+        alternar_etapa(IQ_ETAPA_AUTOCERO);
+        break;
     case 'p':
-        if (volcado_total == 0u) {
+        if (adq_capturando()) {
+            tx_texto("# p: espere a que termine la captura\r\n");
+        } else if (volcado_total == 0u) {
             iniciar_volcado();
         }
+        break;
+    case 'm':
+        iniciar_captura();
         break;
     case '?':
     case 'h':
@@ -325,6 +386,8 @@ void com_tarea(uint32_t muestras_perdidas)
         estado_paso = (estado_paso < ESTADO_LINEAS) ? (uint8_t)(estado_paso + 1u) : 0u;
     } else if (volcado_total != 0u) {
         volcar_punto();
+    } else if (adq_captura_lista()) {
+        enviar_captura();
     }
 }
 

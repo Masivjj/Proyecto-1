@@ -7,7 +7,8 @@
 
   @Description
     HFINTOSC a 32 MHz (FOSC = 32 MHz, 8 MIPS), todos los modulos habilitados
-    en PMD. Equivalente a lo que genera MCC Classic con
+    en PMD. El ADCC se inicializa despues del TMR2 y el PWM6 que lo disparan.
+    Equivalente a lo que genera MCC Classic con
     docs/configuracion_MCC_Classic.md.
 */
 
@@ -21,8 +22,9 @@ void SYSTEM_Initialize(void)
     PIN_MANAGER_Initialize();
     OSCILLATOR_Initialize();
     FVR_Initialize();
-    ADCC_Initialize();
     TMR2_Initialize();
+    PWM6_Initialize();
+    ADCC_Initialize();
     EUSART1_Initialize();
 }
 

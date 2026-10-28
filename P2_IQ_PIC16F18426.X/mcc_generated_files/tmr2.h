@@ -3,13 +3,13 @@
     tmr2.h
 
   @Summary
-    Temporizador TMR2: tick de 10 ms.
+    Temporizador TMR2: base de tiempo del PWM6 que dispara el ADC.
 
   @Description
-    Reloj FOSC/4 = 8 MHz, prescaler 1:128, periodo T2PR = 124 (125 cuentas),
-    postscaler 1:5:  128 * 125 * 5 / 8 MHz = 10.000 ms exactos.
-    Interrupcion habilitada; la aplicacion instala su funcion con
-    TMR2_SetInterruptHandler().
+    Reloj FOSC/4 = 8 MHz, prescaler 1:4, periodo T2PR = 199 (200 cuentas):
+    4 * 200 / 8 MHz = 100.000 us exactos. Postscaler 1:1 y sin interrupcion:
+    el TMR2 solo marca el periodo del PWM6, cuyo flanco de subida arranca
+    cada conversion del ADC (ADACT = PWM6_out).
     Equivalente a lo que genera MCC Classic con docs/configuracion_MCC_Classic.md.
 */
 
@@ -192,11 +192,7 @@ void TMR2_Counter8BitSet(uint8_t timerVal);
 void TMR2_WriteTimer(uint8_t timerVal);
 void TMR2_Period8BitSet(uint8_t periodVal);
 void TMR2_LoadPeriodRegister(uint8_t periodVal);
-void TMR2_ISR(void);
-void TMR2_CallBack(void);
-void TMR2_SetInterruptHandler(void (* InterruptHandler)(void));
-extern void (*TMR2_InterruptHandler)(void);
-void TMR2_DefaultInterruptHandler(void);
+bool TMR2_HasOverflowOccured(void);
 
 
 #ifdef __cplusplus  // Provide C++ Compatibility

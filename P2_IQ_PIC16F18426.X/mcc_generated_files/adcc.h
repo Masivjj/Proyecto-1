@@ -8,13 +8,13 @@
   @Description
     Equivalente a lo que genera MCC Classic (modulo ADCC) con
     docs/configuracion_MCC_Classic.md:
+      - Modo basico (MD = 000): una conversion por disparo
+      - Disparo de autoconversion: PWM6_out (ADACT = 0x0E), cada 100 us
       - Referencia VDD / VSS, resultado justificado a la derecha
-      - Reloj FOSC/32 -> TAD = 1.0 us a 32 MHz
+      - Reloj FOSC/32 -> TAD = 1.0 us a 32 MHz, sincrono con FOSC (no FRC)
       - Adquisicion: 8 TAD (8 us); sin precarga
-      - Modo Burst Average, ADRPT = 16, ADCRS = 0: al terminar la rafaga,
-        ADFLTR = ADACC = suma de las 16 conversiones
-      - ADTMD = siempre: ADTIF se activa al terminar cada rafaga
-      - Sin interrupciones (la aplicacion consulta ADTIF)
+      - Interrupcion ADIF al terminar cada conversion; la aplicacion instala
+        su funcion con ADCC_SetADIInterruptHandler()
 */
 
 #ifndef ADCC_H
@@ -96,6 +96,10 @@ void ADCC_DisableContinuousConversion(void);
 bool ADCC_HasErrorCrossedUpperThreshold(void);
 bool ADCC_HasErrorCrossedLowerThreshold(void);
 uint8_t ADCC_GetConversionStageStatus(void);
+void ADCC_ISR(void);
+void ADCC_SetADIInterruptHandler(void (* InterruptHandler)(void));
+extern void (*ADCC_ADI_InterruptHandler)(void);
+void ADCC_DefaultInterruptHandler(void);
 
 #ifdef __cplusplus  // Provide C++ Compatibility
 
