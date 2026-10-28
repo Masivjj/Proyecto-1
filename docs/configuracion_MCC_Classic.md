@@ -143,7 +143,7 @@ Con él se conoce VCC_A en voltios (`VCC_A = 1.024 · cV / cFVR`) para la protec
 
 ## 8. Memory
 
-Añade el módulo **Memory** (Device Resources). Genera `DATAEE_ReadByte()` y `DATAEE_WriteByte()` (y las funciones FLASH_x, que no se usan). La EEPROM de datos está en 0xF000–0xF0FF; el firmware guarda ahí I0, Q0, θ, G y la corrección de signo (17 bytes).
+Añade el módulo **Memory** (Device Resources). Genera `DATAEE_ReadByte()` y `DATAEE_WriteByte()` (y las funciones FLASH_x, que no se usan). La EEPROM de datos está en 0xF000–0xF0FF; el firmware guarda ahí I0, Q0, θ, G y las etapas activas (17 bytes).
 
 ---
 

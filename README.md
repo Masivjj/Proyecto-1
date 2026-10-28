@@ -2,8 +2,9 @@
 
 Firmware para **PIC16F18426** (MPLAB X + XC8 + **MCC Classic**) que lee las dos componentes DC **I** y **Q** de la tarjeta demoduladora P2 y reproduce el procesamiento del VI de LabVIEW `P2_IQ_SINAD.vi` para detectar fisuras en tubo de aluminio con una sonda de corrientes de Eddy diferencial:
 
-- normalización ratiométrica a VCC_A = 3.7 V, división por la ganancia DC (×2, ×11, ×101) y corrección del signo de I;
+- normalización ratiométrica a VCC_A = 3.7 V, división por la ganancia DC (×2, ×11, ×101) y corrección (fija) del signo invertido de I;
 - cero (I0, Q0), ángulo de calibración θ (lift-off) y rotación → señales finales I′, Q′;
+- las etapas de cero, θ, ganancia y normalización a VCC_A se activan y desactivan en marcha con una tecla;
 - indicadores por bloque de 0.1 s: |V|, Fase y d estimada (×10⁻⁴);
 - traza del plano polar, envío por UART al PC y un programa en Python que dibuja el plano polar como el VI.
 
@@ -13,8 +14,8 @@ La especificación de partida está en [`docs/P2_IQ_procesamiento_para_PIC16F184
 
 | Qué | Cómo | Resultado |
 |---|---|---|
-| Procesamiento (P1–P10) | `tests/test_iq_proc.c`: el mismo `iq_proc.c` del PIC compilado con gcc, con los 12 vectores de la sección 9.1 y casos extra | 71/71 correctas |
-| Firmware completo (`main.c` y `app/`) | `tests/sim`: se compila sin cambios contra un hardware simulado (ADC con una fisura sintética, UART, EEPROM, botones, retrasos del lazo) | 22/22 comprobaciones |
+| Procesamiento (P1–P10) | `tests/test_iq_proc.c`: el mismo `iq_proc.c` del PIC compilado con gcc, con los vectores de la sección 9.1, las etapas activables y casos extra | 97/97 correctas |
+| Firmware completo (`main.c` y `app/`) | `tests/sim`: se compila sin cambios contra un hardware simulado (ADC con una fisura sintética, UART, EEPROM, botones, retrasos del lazo, etapas desactivadas) | 27/27 comprobaciones |
 | Nombres de registros y bits | todos los `.c` contra el `pic16f18426.h` oficial (DFP 1.32.471) con gcc; las 146 macros de pines; los `#pragma config` contra el `cfgdata` del dispositivo | sin errores |
 | Programa del PC | `tests/test_plano_polar.py` y prueba sin ventana con `--demo` y `--archivo` | correcto |
 | **Compilación con XC8** | **no se ha podido ejecutar XC8 en el entorno donde se escribió** | **pendiente: compilar en MPLAB X** |
@@ -33,7 +34,7 @@ P2_IQ_PIC16F18426.X/            proyecto de MPLAB X (abrir esta carpeta)
 │   ├── adquisicion.c/.h        ADCC en Burst Average: I_OUT, Q_OUT, V_REF, VCC_A, FVR
 │   ├── comunicacion.c/.h       protocolo UART: muestras, bloques y órdenes
 │   ├── traza.c/.h              traza del plano polar (P9), buffer circular
-│   ├── ajustes.c/.h            I0, Q0, θ, G y signo en EEPROM (escritura sin bloqueo)
+│   ├── ajustes.c/.h            I0, Q0, θ, G y etapas en EEPROM (escritura sin bloqueo)
 │   ├── botones.c/.h            pulsadores con antirrebote
 │   └── formato.c/.h            números a texto sin printf
 ├── mcc_generated_files/        drivers de MCC Classic (ver docs/configuracion_MCC_Classic.md)
@@ -87,7 +88,7 @@ Cada 10 ms (TMR2) el PIC convierte los cinco canales con el ADCC en modo *Burst 
 | Etapa del VI | Dónde |
 |---|---|
 | P1 VCC_A y protección de 2.5 V | `iq_proc.c: escalar()` y `cerrar_bloque()`; VCC_A en voltios = 1.024 · cV / cFVR |
-| P2–P3 k = 3.7/VCC_A/G·1000, signo de I | `escalar()`: Ip = ∓(cI − cR)·3700 / (cV·G); VDD se cancela |
+| P2–P3 k = 3.7/VCC_A/G·1000, signo de I | `escalar()`: Ip = −(cI − cR)·3700 / (cV·G); VDD se cancela. El signo de I se corrige siempre (la tarjeta fabricada lo invierte, sección 1.3); si se arregla la tarjeta, quitar el signo menos en `escalar()` |
 | P4 medias del bloque | `iq_procesar()` / `cerrar_bloque()` |
 | P5 Fijar cero / Borrar 0 | `cerrar_bloque()` ("Borrar 0" manda) |
 | P6–P8 sin cero y rotación por −θ | `iq_procesar()`: I′ = Ic·cosθ + Qc·sinθ, Q′ = Qc·cosθ − Ic·sinθ |
@@ -105,7 +106,20 @@ Cada 10 ms (TMR2) el PIC convierte los cinco canales con el ADCC en modo *Burst 
 
 **Pulsadores:** cada pulsación (antirrebote de 30 ms) vale un bloque, como los botones *latch* del VI. Las demás órdenes van por UART.
 
-**EEPROM:** I0, Q0, θ, G y la corrección de signo se guardan al cambiar y se recuperan al encender (17 bytes con suma de control; un byte por tick, sin parar el muestreo). Se desactiva con `USAR_EEPROM 0`.
+**EEPROM:** I0, Q0, θ, G y las etapas activas se guardan al cambiar y se recuperan al encender (17 bytes con suma de control; un byte por tick, sin parar el muestreo). Se desactiva con `USAR_EEPROM 0`.
+
+## Etapas que se pueden desactivar
+
+Cada etapa se activa o desactiva en marcha con una tecla (por UART o en el programa del PC), con las casillas *Etapas activas* del programa del PC o, para el arranque, con su opción en `app_config.h`. El estado se guarda en la EEPROM y se informa en cada línea `B` y en la línea de configuración.
+
+| Etapa | Tecla | Desactivada |
+|---|---|---|
+| Cero (P5–P6) | `Z` | no se resta I0, Q0: I′, Q′ salen de Ip, Qp; «Fijar cero» y «Borrar 0» se ignoran |
+| θ (P7–P8) | `T` | no se rota: I′ = Ic, Q′ = Qc; «Calibrar θ» y «θ = 0» se ignoran |
+| Ganancia (P2) | `G` | no se divide por G: se ve la tensión a la salida de la tarjeta (d estimada deja de ser válida) |
+| Normalización a VCC_A (P1–P2) | `N` | no se escala a 3.7 V: voltios absolutos medidos con el FVR (con `USAR_FVR 0` no se puede desactivar) |
+
+Desactivar una etapa no borra lo guardado (I0, Q0, θ, G): al volver a activarla se aplica otra vez. Las órdenes de una etapa desactivada (por UART o con los pulsadores) se contestan con `-> ignorada (etapa desactivada)`.
 
 ## Protocolo UART (115200 8N1)
 
@@ -113,26 +127,27 @@ Líneas del PIC (texto, CR LF):
 
 ```
 t_ms,Ip_uV,Qp_uV,I1_uV,Q1_uV                                          100 por segundo
-B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas  10 por segundo
+B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas   10 por segundo
 P,I1_uV,Q1_uV                                                         volcado de la traza (orden p)
 # ...                                                                 respuestas y comentarios
 ```
 
-Los seis primeros campos de la línea `B` son los de la sección 10.7; se añaden `vcc_mV`, `G` y `banderas`: 1 = VCC_A fuera de rango (se usa 3.7 V), 2 = I saturada, 4 = Q saturada, 8 = VCC_A ≥ VDD, 16 = sin lectura del FVR, 32 = se descartaron muestras por retraso.
+Los seis primeros campos de la línea `B` son los de la sección 10.7; se añaden `vcc_mV`, `G`, `banderas` (1 = VCC_A fuera de rango, se usa 3.7 V; 2 = I saturada; 4 = Q saturada; 8 = VCC_A ≥ VDD; 16 = sin lectura del FVR; 32 = se descartaron muestras por retraso) y `etapas` (1 = cero, 2 = θ, 4 = ganancia, 8 = normalización; 15 = todas activas). La configuración se informa con líneas `# G=2 cero=ON theta=ON ganancia=ON norm=ON I0_uV=… Q0_uV=… theta_cdeg=…`.
 
 Órdenes de un carácter (también desde cualquier terminal serie):
 
 | Orden | Acción | Orden | Acción |
 |---|---|---|---|
 | `z` | Fijar cero | `2` / `1` / `0` | ganancia ×2 / ×11 / ×101 |
-| `x` | Borrar 0 | `s` | alternar la corrección de signo de I |
-| `c` | Calibrar θ | `p` | volcar la traza del PIC |
-| `t` | θ = 0 | `?` | estado (configuración, puntos, muestras perdidas) y ayuda |
-| `b` | Borrar traza | | |
+| `x` | Borrar 0 | `Z` | activar / desactivar la etapa de cero |
+| `c` | Calibrar θ | `T` | activar / desactivar la etapa de θ |
+| `t` | θ = 0 | `G` | activar / desactivar la ganancia |
+| `b` | Borrar traza | `N` | activar / desactivar la normalización a VCC_A |
+| `p` | volcar la traza del PIC | `?` | estado (configuración, puntos, muestras perdidas) y ayuda |
 
 ## Programa del PC (`pc/plano_polar.py`)
 
-Dibuja el plano polar (traza de los últimos `--puntos` puntos, 2000 por defecto y hasta 12000 como en la medida real, unidos en orden de llegada y con autoescala: el anillo exterior vale el r máximo), las gráficas "I y Q (mV)" e "I y Q procesadas (mV)" de los últimos 10 s y los indicadores. Los botones y las teclas (`z x c t b 2 1 0 s`) envían las órdenes; `g` o el botón *Grabar* guardan un CSV (`t_ms, Ip, Qp, I1, Q1` en mV, y |V|, Fase y d en la fila que cierra cada bloque), equivalente a *Write To Measurement File*.
+Dibuja el plano polar (traza de los últimos `--puntos` puntos, 2000 por defecto y hasta 12000 como en la medida real, unidos en orden de llegada y con autoescala: el anillo exterior vale el r máximo), las gráficas "I y Q (mV)" e "I y Q procesadas (mV)" de los últimos 10 s y los indicadores. Los botones, las casillas *Etapas activas* y las teclas (`z x c t b 2 1 0 Z T G N`) envían las órdenes; `g` o el botón *Grabar* guardan un CSV (`t_ms, Ip, Qp, I1, Q1` en mV, y |V|, Fase y d en la fila que cierra cada bloque), equivalente a *Write To Measurement File*.
 
 ```
 python pc/plano_polar.py --puerto COM5 --puntos 12000 --csv medida.csv --comentario "dc ganancia x2"
@@ -145,7 +160,10 @@ python pc/plano_polar.py --demo                    # sin hardware
 | Opción | Por defecto | Efecto |
 |---|---|---|
 | `GANANCIA_INICIAL` | 2 | ganancia DC si la EEPROM está vacía (debe coincidir con los jumpers) |
-| `CORR_SIGNO_INICIAL` | 1 | corrige la inversión del canal I de la tarjeta fabricada |
+| `CERO_ACTIVO` | 1 | etapa de cero activa al arrancar sin datos en la EEPROM |
+| `THETA_ACTIVO` | 1 | etapa de θ activa al arrancar |
+| `GANANCIA_ACTIVA` | 1 | división por G activa al arrancar |
+| `NORMALIZACION_ACTIVA` | 1 | normalización a VCC_A activa al arrancar |
 | `USAR_FVR` | 1 | mide el FVR para conocer VCC_A en voltios (protección de 2.5 V) |
 | `DIVISOR_VCCA` | 1 | 2 si se monta un divisor 1:2 en la entrada de VCC_A |
 | `N_TRAZA` | 64 | puntos de la traza en el PIC (0 = sin traza; 512 B de RAM con 64) |

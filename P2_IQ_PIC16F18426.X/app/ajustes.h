@@ -1,5 +1,5 @@
 /*
- * ajustes.h - I0, Q0, theta, G y correccion de signo en la EEPROM.
+ * ajustes.h - I0, Q0, theta, G y etapas activas en la EEPROM.
  */
 #ifndef AJUSTES_H
 #define AJUSTES_H

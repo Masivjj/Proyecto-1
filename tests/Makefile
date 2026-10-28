@@ -36,8 +36,8 @@ sim: sim/sim.c sim/mcc.h verificar_sim.py $(FW)/main.c $(wildcard $(APP)/*)
 	cp $(FW)/main.c $(SIM)/
 	cp $(APP)/*.c $(APP)/*.h $(SIM)/app/
 	cp sim/mcc.h $(SIM)/mcc_generated_files/
-	$(CC) -std=c99 -Wall -Wextra -O2 -Wno-main -Dmain=firmware_main -c $(SIM)/main.c -o $(SIM)/main.o
-	$(CC) -std=c99 -Wall -Wextra -O2 -I$(SIM) -o $(SIM)/sim sim/sim.c $(SIM)/main.o $(SIM_APP) -lm
+	$(CC) -std=c99 -Wall -Wextra -Werror -O2 -Wno-main -Dmain=firmware_main -c $(SIM)/main.c -o $(SIM)/main.o
+	$(CC) -std=c99 -Wall -Wextra -Werror -O2 -I$(SIM) -o $(SIM)/sim sim/sim.c $(SIM)/main.o $(SIM_APP) -lm
 	./$(SIM)/sim 10 $(SIM)/eeprom.bin > $(SIM)/arranque1.txt
 	./$(SIM)/sim 0.3 $(SIM)/eeprom.bin > $(SIM)/arranque2.txt
 	python3 verificar_sim.py $(SIM)/arranque1.txt $(SIM)/arranque2.txt

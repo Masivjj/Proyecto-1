@@ -18,7 +18,7 @@
 #define CENTESIMAS      100.0f      /* grados -> centesimas de grado */
 #define MILESIMAS       1000.0f     /* d (x1e-4) -> milesimas        */
 
-#define ESTADO_LINEAS   7u
+#define ESTADO_LINEAS   8u
 
 static uint8_t estado_paso;         /* proxima linea del estado (0 = ninguna) */
 static uint8_t volcado_total;       /* puntos a volcar (0 = sin volcado)      */
@@ -72,6 +72,14 @@ static void tx_fin(void)
     tx_car('\n');
 }
 
+/* " nombre=ON" o " nombre=OFF" segun la etapa este activa */
+static void tx_etapa(const char *nombre, uint8_t etapa)
+{
+    tx_car(' ');
+    tx_texto(nombre);
+    tx_texto(((iq_etapas() & etapa) != 0u) ? "=ON" : "=OFF");
+}
+
 static void tx_configuracion(void)
 {
     float i0, q0, th;
@@ -79,7 +87,10 @@ static void tx_configuracion(void)
     iq_leer_calibracion(&i0, &q0, &th);
     tx_texto("# G=");
     tx_u32(iq_ganancia());
-    tx_texto(iq_corr_signo() ? " signo_I=ON" : " signo_I=OFF");
+    tx_etapa("cero", IQ_ETAPA_CERO);
+    tx_etapa("theta", IQ_ETAPA_THETA);
+    tx_etapa("ganancia", IQ_ETAPA_GANANCIA);
+    tx_etapa("norm", IQ_ETAPA_NORMALIZACION);
     tx_texto(" I0_uV=");
     tx_i32(fmt_a_entero(i0, UV_POR_MV));
     tx_texto(" Q0_uV=");
@@ -110,13 +121,16 @@ static void tx_linea_estado(uint8_t paso, uint32_t muestras_perdidas)
         tx_texto("# muestra: t_ms,Ip_uV,Qp_uV,I1_uV,Q1_uV\r\n");
         break;
     case 5u:
-        tx_texto("# bloque:  B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas\r\n");
+        tx_texto("# bloque:  B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas\r\n");
         break;
     case 6u:
         tx_texto("# ordenes: z=fijar cero x=borrar cero c=calibrar theta t=theta 0 b=borrar traza\r\n");
         break;
+    case 7u:
+        tx_texto("#          2/1/0=ganancia x2/x11/x101 p=volcar traza ?=estado\r\n");
+        break;
     default:
-        tx_texto("#          2/1/0=ganancia x2/x11/x101 s=signo de I p=volcar traza ?=estado\r\n");
+        tx_texto("# etapas (activar/desactivar): Z=cero T=theta G=ganancia N=normalizacion VCC_A\r\n");
         break;
     }
 }
@@ -156,20 +170,53 @@ void com_bloque(const iq_bloque_t *b)
     tx_u32(iq_ganancia());
     tx_car(',');
     tx_u32(b->banderas);
+    tx_car(',');
+    tx_u32(b->etapas);
+    tx_fin();
+}
+
+/* Final de la respuesta a una orden de la etapa indicada */
+static void tx_fin_orden(uint8_t etapa)
+{
+    if ((iq_etapas() & etapa) == 0u) {
+        tx_texto(" -> ignorada (etapa desactivada)");
+    }
     tx_fin();
 }
 
 void com_eventos_boton(uint8_t eventos)
 {
     if ((eventos & IQ_EV_FIJAR_CERO) != 0u) {
-        tx_texto("# boton: fijar cero\r\n");
+        tx_texto("# boton: fijar cero");
+        tx_fin_orden(IQ_ETAPA_CERO);
     }
     if ((eventos & IQ_EV_CALIBRAR) != 0u) {
-        tx_texto("# boton: calibrar theta\r\n");
+        tx_texto("# boton: calibrar theta");
+        tx_fin_orden(IQ_ETAPA_THETA);
     }
 }
 
 /* ---- Ordenes ---- */
+
+/* Orden de una etapa ("Fijar cero", "Calibrar theta"...). Si la etapa esta
+ * desactivada, iq_proc la ignora al cerrar el bloque. */
+static void orden_de_etapa(uint8_t etapa, uint8_t evento, const char *texto)
+{
+    iq_evento(evento);
+    tx_texto(texto);
+    tx_fin_orden(etapa);
+}
+
+static void alternar_etapa(uint8_t etapa)
+{
+    uint8_t antes = iq_etapas();
+
+    if ((iq_fijar_etapas((uint8_t)(antes ^ etapa)) & etapa) == (antes & etapa)) {
+        tx_texto("# sin FVR (USAR_FVR = 0) la normalizacion no se puede desactivar\r\n");
+    }
+    ajustes_guardar();
+    tx_configuracion();
+}
 
 static void cambiar_ganancia(uint8_t g)
 {
@@ -213,20 +260,16 @@ static void atender_orden(char ch)
 {
     switch (ch) {
     case 'z':
-        iq_evento(IQ_EV_FIJAR_CERO);
-        tx_texto("# z: fijar cero\r\n");
+        orden_de_etapa(IQ_ETAPA_CERO, IQ_EV_FIJAR_CERO, "# z: fijar cero");
         break;
     case 'x':
-        iq_evento(IQ_EV_BORRAR_CERO);
-        tx_texto("# x: borrar cero\r\n");
+        orden_de_etapa(IQ_ETAPA_CERO, IQ_EV_BORRAR_CERO, "# x: borrar cero");
         break;
     case 'c':
-        iq_evento(IQ_EV_CALIBRAR);
-        tx_texto("# c: calibrar theta\r\n");
+        orden_de_etapa(IQ_ETAPA_THETA, IQ_EV_CALIBRAR, "# c: calibrar theta");
         break;
     case 't':
-        iq_evento(IQ_EV_THETA_0);
-        tx_texto("# t: theta = 0\r\n");
+        orden_de_etapa(IQ_ETAPA_THETA, IQ_EV_THETA_0, "# t: theta = 0");
         break;
     case 'b':
         iq_evento(IQ_EV_BORRAR_TRAZA);
@@ -241,10 +284,17 @@ static void atender_orden(char ch)
     case '0':
         cambiar_ganancia(101u);
         break;
-    case 's':
-        iq_fijar_corr_signo(!iq_corr_signo());
-        ajustes_guardar();
-        tx_configuracion();
+    case 'Z':
+        alternar_etapa(IQ_ETAPA_CERO);
+        break;
+    case 'T':
+        alternar_etapa(IQ_ETAPA_THETA);
+        break;
+    case 'G':
+        alternar_etapa(IQ_ETAPA_GANANCIA);
+        break;
+    case 'N':
+        alternar_etapa(IQ_ETAPA_NORMALIZACION);
         break;
     case 'p':
         if (volcado_total == 0u) {

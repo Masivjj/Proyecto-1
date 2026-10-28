@@ -7,7 +7,7 @@ Es la "opción A" de la especificación (sección 10.7): el PIC hace todo el
 procesamiento del VI P2_IQ_SINAD.vi y envía por UART (115200 baudios):
 
     t_ms,Ip_uV,Qp_uV,I1_uV,Q1_uV                                  100 por segundo
-    B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas
+    B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas
                                                                    10 por segundo
 Este programa lo dibuja como el panel de LabVIEW:
   - plano polar: traza de los últimos N puntos (I', Q') unidos en orden de
@@ -16,7 +16,9 @@ Este programa lo dibuja como el panel de LabVIEW:
   - indicadores |V|, Fase, d estimada, I0, Q0, θ, VCC_A y avisos
 y envía las órdenes con botones o con el teclado:
     z Fijar cero   x Borrar 0   c Calibrar θ   t θ = 0   b Borrar traza
-    2 / 1 / 0 ganancia ×2 / ×11 / ×101   s corrección de signo de I
+    2 / 1 / 0 ganancia ×2 / ×11 / ×101
+    Z / T / G / N activar o desactivar la etapa de cero / θ / ganancia /
+                  normalización a VCC_A (también con las casillas "Etapas")
     g Grabar (CSV)
 
 Uso:
@@ -57,9 +59,19 @@ AVISOS = (
 TECLAS = {
     "z": "Fijar cero", "x": "Borrar 0", "c": "Calibrar θ", "t": "θ = 0",
     "b": "Borrar traza", "2": "Ganancia ×2", "1": "Ganancia ×11",
-    "0": "Ganancia ×101", "s": "Corrección signo I",
+    "0": "Ganancia ×101", "Z": "Etapa de cero", "T": "Etapa de θ",
+    "G": "Etapa de ganancia", "N": "Etapa de normalización a VCC_A",
 }
 GANANCIAS = {2: "2", 11: "1", 101: "0"}         # ganancia -> orden
+
+# Etapas que se pueden desactivar: (bit, orden, clave en "# G=...", nombre)
+ETAPAS = (
+    (0x01, "Z", "cero", "Cero"),
+    (0x02, "T", "theta", "θ"),
+    (0x04, "G", "ganancia", "Ganancia"),
+    (0x08, "N", "norm", "Norm. VCC_A"),
+)
+TODAS = 0x0F
 
 
 # --------------------------------------------------------------------------
@@ -70,7 +82,7 @@ def interpretar(linea):
     """Devuelve (tipo, datos) de una línea del PIC, o None si no se entiende.
 
     tipo: "muestra" (t_ms, Ip, Qp, I1, Q1) en ms y mV
-          "bloque"  dict con V, fase, d, I0, Q0, theta, vcc, G, banderas
+          "bloque"  dict con V, fase, d, I0, Q0, theta, vcc, G, banderas, etapas
           "punto"   (I1, Q1) del volcado de la traza (orden 'p')
           "texto"   comentario o respuesta (líneas con '#')
     """
@@ -84,14 +96,16 @@ def interpretar(linea):
             t, ip, qp, i1, q1 = (int(x) for x in linea.split(","))
             return ("muestra", (t, ip / 1000, qp / 1000, i1 / 1000, q1 / 1000))
         if linea.startswith("B,"):
-            # 6 campos de la especificación (10.7) + vcc_mV, G y banderas
+            # 6 campos de la especificación (10.7) + vcc_mV, G, banderas y etapas
             c = [int(x) for x in linea[2:].split(",")]
             if len(c) < 6:
                 return None
-            vcc, g, banderas = (c[6:] + [0, 0, 0])[:3]
+            extra = c[6:10]
+            vcc, g, banderas, etapas = extra + [0, 0, 0, TODAS][len(extra):]
             return ("bloque", {"V": c[0] / 1000, "fase": c[1] / 100, "d": c[2] / 1000,
                                "I0": c[3] / 1000, "Q0": c[4] / 1000, "theta": c[5] / 100,
-                               "vcc": vcc / 1000, "G": g, "banderas": banderas})
+                               "vcc": vcc / 1000, "G": g, "banderas": banderas,
+                               "etapas": etapas})
         if linea.startswith("P,"):
             _, i1, q1 = linea.split(",")
             return ("punto", (int(i1) / 1000, int(q1) / 1000))
@@ -101,12 +115,13 @@ def interpretar(linea):
 
 
 def interpretar_configuracion(texto):
-    """'# G=2 signo_I=ON I0_uV=...' -> {'G': 2, 'signo': True}, o None."""
+    """'# G=2 cero=ON theta=OFF ...' -> {'G': 2, 'etapas': máscara}, o None."""
     if not texto.startswith("# G="):
         return None
     campos = dict(p.split("=", 1) for p in texto[1:].split() if "=" in p)
     try:
-        return {"G": int(campos["G"]), "signo": campos.get("signo_I") == "ON"}
+        etapas = sum(bit for bit, _, clave, _ in ETAPAS if campos.get(clave, "ON") == "ON")
+        return {"G": int(campos["G"]), "etapas": etapas}
     except (KeyError, ValueError):
         return None
 
@@ -187,7 +202,7 @@ class FuenteDemo:
         self.descripcion = "demostración (sin hardware)"
         self.cola = queue.Queue()
         self.ordenes = queue.Queue()
-        self.G, self.signo = 2, True
+        self.G, self.etapas = 2, TODAS
         self.I0 = self.Q0 = self.theta = 0.0
         self.eventos = set()
         threading.Thread(target=self._generar, daemon=True).start()
@@ -199,9 +214,14 @@ class FuenteDemo:
         pass
 
     def _configuracion(self):
-        return (f"# G={self.G} signo_I={'ON' if self.signo else 'OFF'} "
+        estados = " ".join(f"{clave}={'ON' if self.etapas & bit else 'OFF'}"
+                           for bit, _, clave, _ in ETAPAS)
+        return (f"# G={self.G} {estados} "
                 f"I0_uV={round(self.I0 * 1000)} Q0_uV={round(self.Q0 * 1000)} "
                 f"theta_cdeg={round(self.theta * 100)}")
+
+    def _activa(self, bit):
+        return bool(self.etapas & bit)
 
     def _senal(self, t):
         ip, qp = 62.3276, 21.1352           # cero de la medida real
@@ -216,22 +236,26 @@ class FuenteDemo:
             qp += a * math.sin(math.radians(20))
         ip += random.gauss(0, 0.05)
         qp += random.gauss(0, 0.05)
-        if not self.signo:                  # sin corrección, I sale invertido
-            ip = -ip
-        escala = self.G_TARJETA / self.G    # ganancia distinta de los jumpers
+        # sin dividir por G se ve la salida de la tarjeta (×G_TARJETA); con otra
+        # G distinta de los jumpers la escala sale mal
+        escala = self.G_TARJETA / (self.G if self._activa(0x04) else 1)
+        if not self._activa(0x08):          # sin normalizar: VCC_A real de 3.653 V
+            escala *= 3.653 / 3.7
         return ip * escala, qp * escala
 
     def _atender_orden(self, o):
         nombres = {"z": "fijar cero", "x": "borrar cero", "c": "calibrar theta",
                    "t": "theta = 0", "b": "borrar traza"}
+        etapa_de = {"z": 0x01, "x": 0x01, "c": 0x02, "t": 0x02}
         if o in nombres:
             self.eventos.add(o)
-            self.cola.put(f"# {o}: {nombres[o]}")
+            ignorada = o in etapa_de and not self._activa(etapa_de[o])
+            self.cola.put(f"# {o}: {nombres[o]}" + (" -> ignorada (etapa desactivada)" if ignorada else ""))
         elif o in ("2", "1", "0"):
             self.G = {"2": 2, "1": 11, "0": 101}[o]
             self.cola.put(self._configuracion())
-        elif o == "s":
-            self.signo = not self.signo
+        elif o in ("Z", "T", "G", "N"):
+            self.etapas ^= next(bit for bit, orden, _, _ in ETAPAS if orden == o)
             self.cola.put(self._configuracion())
         elif o in "?h":
             self.cola.put("# P2 IQ - demostracion")
@@ -250,34 +274,43 @@ class FuenteDemo:
             while not self.ordenes.empty():
                 self._atender_orden(self.ordenes.get())
             ip, qp = self._senal(n * PERIODO_S)
-            c, s = math.cos(math.radians(self.theta)), math.sin(math.radians(self.theta))
-            ic, qc = ip - self.I0, qp - self.Q0
-            i1, q1 = ic * c + qc * s, qc * c - ic * s
+            i1, q1 = self._cero_y_rotacion(ip, qp)
             self.cola.put(f"{n * 10},{round(ip * 1000)},{round(qp * 1000)},"
                           f"{round(i1 * 1000)},{round(q1 * 1000)}")
             sum_i += ip
             sum_q += qp
             if n % 10:
                 continue
-            # cierre del bloque: P4, P5, P7 y P10 como en el firmware
+            # cierre del bloque: P4, P5, P7 y P10 como en el firmware; las
+            # órdenes de una etapa desactivada no hacen nada
             mi, mq = sum_i / 10, sum_q / 10
             sum_i = sum_q = 0.0
-            if "z" in self.eventos:
-                self.I0, self.Q0 = mi, mq
-            if "x" in self.eventos:
-                self.I0 = self.Q0 = 0.0
-            mic, mqc = mi - self.I0, mq - self.Q0
-            if "c" in self.eventos:
-                self.theta = math.degrees(math.atan2(mqc, mic))
-            if "t" in self.eventos:
-                self.theta = 0.0
+            if self._activa(0x01):
+                if "z" in self.eventos:
+                    self.I0, self.Q0 = mi, mq
+                if "x" in self.eventos:
+                    self.I0 = self.Q0 = 0.0
+            if self._activa(0x02):
+                if "c" in self.eventos:
+                    mic, mqc = (mi - self.I0, mq - self.Q0) if self._activa(0x01) else (mi, mq)
+                    self.theta = math.degrees(math.atan2(mqc, mic))
+                if "t" in self.eventos:
+                    self.theta = 0.0
             self.eventos.clear()
-            c, s = math.cos(math.radians(self.theta)), math.sin(math.radians(self.theta))
-            mi1, mq1 = mic * c + mqc * s, mqc * c - mic * s
+            mi1, mq1 = self._cero_y_rotacion(mi, mq)
             v = math.hypot(mi1, mq1)
             self.cola.put(f"B,{round(v * 1000)},{round(math.degrees(math.atan2(mq1, mi1)) * 100)},"
                           f"{round(v / MV_POR_1E4 * 1000)},{round(self.I0 * 1000)},"
-                          f"{round(self.Q0 * 1000)},{round(self.theta * 100)},3653,{self.G},0")
+                          f"{round(self.Q0 * 1000)},{round(self.theta * 100)},3653,{self.G},0,"
+                          f"{self.etapas}")
+
+    def _cero_y_rotacion(self, ip, qp):
+        if self._activa(0x01):
+            ip, qp = ip - self.I0, qp - self.Q0
+        if not self._activa(0x02):
+            return ip, qp
+        c, s = math.cos(math.radians(self.theta)), math.sin(math.radians(self.theta))
+        return ip * c + qp * s, qp * c - ip * s
 
 
 # --------------------------------------------------------------------------
@@ -316,7 +349,7 @@ class Grabador:
             self.pendiente = None
 
     def configuracion(self, texto):
-        """Deja constancia en el CSV de un cambio de G, signo, cero o θ."""
+        """Deja constancia en el CSV de un cambio de G, etapas, cero o θ."""
         if self.pendiente:
             self._escribir(self.pendiente)
             self.pendiente = None
@@ -405,10 +438,13 @@ class Panel:
         ax_g.set_title("Ganancia DC", fontsize=9)
         self.radio_g = RadioButtons(ax_g, ("×2", "×11", "×101"))
         self.radio_g.on_clicked(self._ganancia)
-        ax_s = self.fig.add_axes([0.385, 0.025, 0.09, 0.12])
-        ax_s.set_title("Corrección", fontsize=9)
-        self.check_signo = CheckButtons(ax_s, ("signo I",), (True,))
-        self.check_signo.on_clicked(self._signo)
+        ax_e = self.fig.add_axes([0.385, 0.012, 0.105, 0.145])
+        ax_e.set_title("Etapas activas", fontsize=9)
+        self.check_etapas = CheckButtons(ax_e, [nombre for _, _, _, nombre in ETAPAS],
+                                         [True] * len(ETAPAS))
+        for etiqueta in self.check_etapas.labels:
+            etiqueta.set_fontsize(8)
+        self.check_etapas.on_clicked(self._etapa)
 
         self.fig.canvas.mpl_connect("key_press_event", self._tecla)
         self.fig.canvas.mpl_connect("close_event", lambda _evento: self.cerrar())
@@ -433,11 +469,14 @@ class Panel:
         if not self.sincronizando:
             self.fuente.enviar(GANANCIAS[int(etiqueta[1:])])
 
-    def _signo(self, _etiqueta):
+    def _etapa(self, etiqueta):
         if not self.sincronizando:
-            self.fuente.enviar("s")
+            self.fuente.enviar(next(orden for _, orden, _, nombre in ETAPAS if nombre == etiqueta))
 
-    def _sincronizar(self, g=None, signo=None):
+    def etapas_activas(self):
+        return sum(bit for (bit, _, _, _), activa in zip(ETAPAS, self.check_etapas.get_status()) if activa)
+
+    def _sincronizar(self, g=None, etapas=None):
         """Pone los controles como dice el PIC sin volver a enviar órdenes."""
         self.sincronizando = True
         try:
@@ -445,8 +484,10 @@ class Panel:
                 indice = (2, 11, 101).index(g)
                 if self.radio_g.value_selected != f"×{g}":
                     self.radio_g.set_active(indice)
-            if signo is not None and self.check_signo.get_status()[0] != signo:
-                self.check_signo.set_active(0)
+            if etapas is not None:
+                for indice, ((bit, _, _, _), activa) in enumerate(zip(ETAPAS, self.check_etapas.get_status())):
+                    if activa != bool(etapas & bit):
+                        self.check_etapas.set_active(indice)
         finally:
             self.sincronizando = False
 
@@ -485,7 +526,7 @@ class Panel:
                 self.bloque = valor
                 if self.grabador:
                     self.grabador.bloque(valor)
-                self._sincronizar(g=valor["G"])
+                self._sincronizar(g=valor["G"], etapas=valor["etapas"])
             elif tipo == "punto":
                 self.punto_volcado += 1
             else:
@@ -498,7 +539,7 @@ class Panel:
                     self.configuracion = valor
                     if self.grabador:
                         self.grabador.configuracion(valor)
-                    self._sincronizar(g=config["G"], signo=config["signo"])
+                    self._sincronizar(g=config["G"], etapas=config["etapas"])
 
     def actualizar(self, _cuadro=None):
         self.procesar_cola()
@@ -561,15 +602,19 @@ class Panel:
         if b is None:
             self.texto_indicadores.set_text("Esperando datos del PIC...")
             return
-        signo = "ON" if self.check_signo.get_status()[0] else "OFF"
+        etapas = b["etapas"]
+        apagada = {bit: ("" if etapas & bit else "  (sin aplicar)") for bit, _, _, _ in ETAPAS}
         self.texto_indicadores.set_text(
-            f"|V|    {b['V']:9.3f} mV        I0       {b['I0']:9.3f} mV\n"
-            f"Fase   {b['fase']:9.2f} °         Q0       {b['Q0']:9.3f} mV\n"
-            f"d      {b['d']:9.3f} ×10⁻⁴     θ        {b['theta']:9.2f} °\n"
-            f"VCC_A  {b['vcc']:9.3f} V         G        ×{b['G']}  (signo I {signo})\n"
+            f"|V|    {b['V']:9.3f} mV        I0       {b['I0']:9.3f} mV{apagada[0x01]}\n"
+            f"Fase   {b['fase']:9.2f} °         Q0       {b['Q0']:9.3f} mV{apagada[0x01]}\n"
+            f"d      {b['d']:9.3f} ×10⁻⁴     θ        {b['theta']:9.2f} °{apagada[0x02]}\n"
+            f"VCC_A  {b['vcc']:9.3f} V         G        ×{b['G']}{apagada[0x04]}\n"
             f"puntos actuales {len(self.traza):6d}     grieta sola |Q'|/4.03 ="
             f" {abs(self.historia[-1][4]) / MV_POR_1E4 if self.historia else 0:.3f} ×10⁻⁴")
         avisos = [texto for bit, texto in AVISOS if b["banderas"] & bit]
+        apagadas = [nombre for bit, _, _, nombre in ETAPAS if not etapas & bit]
+        if apagadas:
+            avisos.append("etapas desactivadas: " + ", ".join(apagadas))
         self.texto_avisos.set_text("  ·  ".join(avisos))
 
     def cerrar(self):
@@ -622,7 +667,7 @@ def main():
 
     if args.puerto:
         datos = FuenteSerie(args.puerto, args.baudios)
-        datos.enviar("?")               # el PIC responde con G y el signo
+        datos.enviar("?")               # el PIC responde con G y las etapas activas
     elif args.archivo:
         datos = FuenteArchivo(args.archivo)
     else:

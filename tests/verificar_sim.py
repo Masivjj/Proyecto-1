@@ -13,6 +13,7 @@ El guion del simulador (tests/sim/sim.c) es:
   6.2 s      orden desconocida       6.5 s  el lazo se retrasa 15 ticks
   7.0 s      pulsador "Fijar cero" 150 ms;  8.0 s  rebote de 20 ms en "Calibrar"
   9.0 s      'b' borrar traza
+  9.3 s      'Z' desactiva el cero;  9.45 s 'z' (ignorada);  9.6 s 'T' desactiva theta
 El segundo arranque usa la EEPROM que dejo el primero.
 """
 import math
@@ -51,7 +52,7 @@ def main():
     entre = lambda t0, t1: [r for r in m if t0 <= r[0] < t1]
 
     comprobar("todas las lineas de muestra tienen 5 campos", all(len(r) == 5 for r in m))
-    comprobar("todas las lineas de bloque tienen 9 campos", all(len(r) == 10 for r in b))
+    comprobar("todas las lineas de bloque tienen 10 campos", all(len(r) == 11 for r in b))
     comprobar("primer arranque sin datos en la EEPROM", "# EEPROM: sin datos, valores por defecto" in lineas)
 
     t = [r[0] for r in m]
@@ -100,10 +101,26 @@ def main():
     comprobar("rebote de 20 ms ignorado", lineas.count("# boton: calibrar theta") == 0)
     comprobar("'b' borrar traza contestado", "# b: borrar traza" in lineas)
 
+    # etapas: cero desactivado desde 9.3 s y theta desde 9.6 s
+    comprobar("campo etapas: 15 hasta 9.3 s, 14 hasta 9.6 s y 12 al final",
+              all(r[10] == 15 for r in b if r[0] <= 9300) and all(r[10] == 14 for r in b if 9400 <= r[0] <= 9600)
+              and all(r[10] == 12 for r in b if r[0] >= 9700), f"{sorted(set(r[10] for r in b))}")
+    sin_cero = entre(9310, 9600)
+    comprobar("cero desactivado: I', Q' = Ip, Qp rotadas por theta",
+              all(abs(r[3] - (r[1] * math.cos(math.radians(19.7)) + r[2] * math.sin(math.radians(19.7)))) < 30
+                  for r in sin_cero), f"{len(sin_cero)} muestras")
+    comprobar("'z' con el cero desactivado: contestada como ignorada y el cero no cambia",
+              "# z: fijar cero -> ignorada (etapa desactivada)" in lineas
+              and len({r[4] for r in b if r[0] >= [x[0] for x in b if x[0] <= 9300][-1]}) == 1)
+    comprobar("cero y theta desactivados: I' = Ip y Q' = Qp", all(r[3] == r[1] and r[4] == r[2] for r in entre(9610, 10000)))
+    comprobar("la configuracion informa de las etapas",
+              any(x.startswith("# G=2 cero=OFF theta=OFF ganancia=ON norm=ON ") for x in lineas))
+
     fin = b[-1]     # estado al terminar el primer arranque
-    esperada = f"# G={fin[8]} signo_I=ON I0_uV={fin[4]} Q0_uV={fin[5]} theta_cdeg={fin[6]}"
+    esperada = (f"# G={fin[8]} cero=OFF theta=OFF ganancia=ON norm=ON "
+                f"I0_uV={fin[4]} Q0_uV={fin[5]} theta_cdeg={fin[6]}")
     comprobar("segundo arranque: ajustes cargados de la EEPROM", "# EEPROM: ajustes cargados" in lineas2)
-    comprobar("segundo arranque: misma G, signo, I0, Q0 y theta", esperada in lineas2, esperada)
+    comprobar("segundo arranque: misma G, etapas, I0, Q0 y theta", esperada in lineas2, esperada)
 
     print(f"\n{fallos} fallos")
     return 1 if fallos else 0

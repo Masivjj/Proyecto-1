@@ -26,10 +26,27 @@
 #define GANANCIA_INICIAL    2u
 #endif
 
-/* "Correccion signo I": la tarjeta fabricada entrega I invertido (seccion 1.3). */
-#ifndef CORR_SIGNO_INICIAL
-#define CORR_SIGNO_INICIAL  1
+/* Etapas del procesamiento activas al arrancar sin datos en la EEPROM
+ * (1 = activa, 0 = desactivada). En marcha se alternan con las ordenes
+ * Z, T, G y N por UART o con las casillas del programa del PC, y el estado
+ * se guarda en la EEPROM. */
+#ifndef CERO_ACTIVO
+#define CERO_ACTIVO             1   /* restar el cero I0, Q0 ("Fijar cero")      */
 #endif
+#ifndef THETA_ACTIVO
+#define THETA_ACTIVO            1   /* rotar por theta ("Calibrar theta")         */
+#endif
+#ifndef GANANCIA_ACTIVA
+#define GANANCIA_ACTIVA         1   /* dividir por la ganancia DC G               */
+#endif
+#ifndef NORMALIZACION_ACTIVA
+#define NORMALIZACION_ACTIVA    1   /* normalizar a VCC_A = 3.7 V (calibracion)   */
+#endif
+#define ETAPAS_INICIALES    ((CERO_ACTIVO ? 0x01u : 0u) | (THETA_ACTIVO ? 0x02u : 0u) | \
+                             (GANANCIA_ACTIVA ? 0x04u : 0u) | (NORMALIZACION_ACTIVA ? 0x08u : 0u))
+
+/* La correccion del signo de I (la tarjeta fabricada lo entrega invertido,
+ * seccion 1.3) ya no es una opcion: se aplica siempre (iq_proc.c, P3). */
 
 /* ------------------------------------------------------------------------
  * Adquisicion (seccion 10.4)
@@ -61,9 +78,9 @@
 #define N_TRAZA             64u     /* puntos (I', Q') guardados en el PIC (0 = sin traza) */
 #endif
 #ifndef USAR_EEPROM
-#define USAR_EEPROM         1       /* 1: guardar I0, Q0, theta, G y signo en la EEPROM   */
+#define USAR_EEPROM         1       /* 1: guardar I0, Q0, theta, G y etapas en la EEPROM  */
 #endif
 
-#define VERSION_FIRMWARE    "1.0"
+#define VERSION_FIRMWARE    "1.1"
 
 #endif /* APP_CONFIG_H */

@@ -12,6 +12,10 @@
  *  - La decision de P1 (VCC_A > 2.5 V) se toma con la media del bloque
  *    anterior; en el primer bloque, con la primera muestra.
  *  - La normalizacion ratiometrica usa el VCC_A de cada muestra (10.4).
+ *
+ * Las etapas cero, theta, ganancia y normalizacion se pueden desactivar en
+ * marcha (iq_fijar_etapas). Desactivar una etapa no borra lo que tenia
+ * guardado (I0, Q0, theta, G): al volver a activarla se aplica de nuevo.
  */
 #include <math.h>
 #include "iq_proc.h"
@@ -31,9 +35,9 @@ typedef char iq_float_de_32_bits[(sizeof(float) == 4u) ? 1 : -1];
 #define CF_MINIMO       ((uint16_t)(N_SOBREMUESTREO * 600u))
 #define CF_MAXIMO       ((uint16_t)(N_SOBREMUESTREO * 2100u))
 
-/* ---- Controles del VI ---- */
+/* ---- Controles ---- */
 static uint8_t ganancia;            /* G: divisor de la etapa DC          */
-static bool    corr_signo;          /* "Correccion signo I"               */
+static uint8_t etapas;              /* IQ_ETAPA_x activas                 */
 
 /* ---- Estado persistente (shift registers del VI) ---- */
 static float   I0, Q0;              /* cero (mV)                          */
@@ -76,10 +80,26 @@ static void reiniciar_bloque(void)
     banderas_blk = 0u;
 }
 
+/* P6 y P8 con las etapas activas: (Ip, Qp) -> (I', Q') */
+static void quitar_cero_y_rotar(float ip, float qp, float *i1, float *q1)
+{
+    if ((etapas & IQ_ETAPA_CERO) != 0u) {
+        ip -= I0;
+        qp -= Q0;
+    }
+    if ((etapas & IQ_ETAPA_THETA) != 0u) {
+        *i1 = ip * c_th + qp * s_th;
+        *q1 = qp * c_th - ip * s_th;
+    } else {
+        *i1 = ip;
+        *q1 = qp;
+    }
+}
+
 void iq_inicializar(void)
 {
     ganancia = GANANCIA_INICIAL;
-    corr_signo = (CORR_SIGNO_INICIAL != 0);
+    iq_fijar_etapas(ETAPAS_INICIALES);
     I0 = 0.0f;
     Q0 = 0.0f;
     fijar_theta(0.0f);
@@ -103,14 +123,20 @@ uint8_t iq_ganancia(void)
     return ganancia;
 }
 
-void iq_fijar_corr_signo(bool activa)
+uint8_t iq_fijar_etapas(uint8_t activas)
 {
-    corr_signo = activa;
+    etapas = (uint8_t)(activas & IQ_ETAPAS_TODAS);
+#if !USAR_FVR
+    /* Sin el FVR no se conocen los voltios absolutos: la normalizacion es
+     * la unica escala posible y no se puede desactivar. */
+    etapas |= IQ_ETAPA_NORMALIZACION;
+#endif
+    return etapas;
 }
 
-bool iq_corr_signo(void)
+uint8_t iq_etapas(void)
 {
-    return corr_signo;
+    return etapas;
 }
 
 void iq_fijar_calibracion(float i0, float q0, float theta_grados)
@@ -146,6 +172,8 @@ static void escalar(const iq_codigos_t *c, iq_muestra_t *m)
 {
     uint32_t cv = (uint32_t)c->cV * DIVISOR_VCCA;  /* VCC_A en cuentas de I_OUT */
     bool fvr_ok = (c->cF >= CF_MINIMO) && (c->cF <= CF_MAXIMO);
+    bool normalizar = ((etapas & IQ_ETAPA_NORMALIZACION) != 0u);
+    float divisor = ((etapas & IQ_ETAPA_GANANCIA) != 0u) ? (float)ganancia : 1.0f;
     float k;
 
     if (saturada(c->cI, cv)) {
@@ -173,28 +201,31 @@ static void escalar(const iq_codigos_t *c, iq_muestra_t *m)
     primera_muestra = false;
 
     /* P2: k en mV por cuenta de (cX - cR) */
-    if (vcc_valida && (cv >= CV_MINIMO)) {
+    if (normalizar && vcc_valida && (cv >= CV_MINIMO)) {
         /* Ratiometrica (10.4): Ip = (cI - cR) / cV * 3.7 V * 1000 / G.
          * Es lo mismo que (3.7 / VCC_A) / G * 1000 aplicado a los voltios
          * crudos: VDD se cancela. */
-        k = (VCC_NOM_V * 1000.0f) / ((float)cv * (float)ganancia);
+        k = (VCC_NOM_V * 1000.0f) / ((float)cv * divisor);
     } else {
-        if (vcc_valida) {
+        if (normalizar && vcc_valida) {
             /* VCC_A se ha caido dentro del bloque. Si no, el LED lo decide la
              * media del bloque (cerrar_bloque), igual que en el VI. */
             banderas_blk |= IQ_FL_VCC_FUERA;
         }
         if (fvr_ok) {
-            /* Vused = 3.7 V, como LabVIEW: k = (3.7 / 3.7) / G * 1000 sobre
-             * los voltios crudos, que valen (cX - cR) * 1.024 / cF. */
-            k = (FVR_V * 1000.0f) / ((float)c->cF * (float)ganancia);
+            /* Sin normalizar (etapa desactivada o VCC_A fuera de rango, donde
+             * LabVIEW usa Vused = 3.7 V): k = 1000 / G sobre los voltios
+             * crudos, que valen (cX - cR) * 1.024 / cF. */
+            k = (FVR_V * 1000.0f) / ((float)c->cF * divisor);
         } else {
             k = 0.0f;   /* sin VCC_A ni FVR no hay escala posible */
         }
     }
 
-    /* P3 (kI = -k con la correccion de signo) */
-    m->Ip = (corr_signo ? -k : k) * (float)((int32_t)c->cI - (int32_t)c->cR);
+    /* P3. La tarjeta fabricada entrega I con el signo invertido (pines 12/13
+     * del 74HC4053 cruzados, seccion 1.3): se corrige siempre con kI = -k.
+     * Si se arregla la tarjeta, quitar el signo menos de la linea de Ip. */
+    m->Ip = -k * (float)((int32_t)c->cI - (int32_t)c->cR);
     m->Qp = k * (float)((int32_t)c->cQ - (int32_t)c->cR);
 }
 
@@ -205,6 +236,14 @@ static void cerrar_bloque(iq_bloque_t *b)
     uint8_t ev = eventos_pend;
 
     eventos_pend = 0u;
+
+    /* Las ordenes de una etapa desactivada no hacen nada */
+    if ((etapas & IQ_ETAPA_CERO) == 0u) {
+        ev &= (uint8_t)~(IQ_EV_FIJAR_CERO | IQ_EV_BORRAR_CERO);
+    }
+    if ((etapas & IQ_ETAPA_THETA) == 0u) {
+        ev &= (uint8_t)~(IQ_EV_CALIBRAR | IQ_EV_THETA_0);
+    }
 
     /* P4: medias de las senales procesadas */
     mI = suma_Ip / (float)N_BLOQUE;
@@ -232,21 +271,23 @@ static void cerrar_bloque(iq_bloque_t *b)
         Q0 = 0.0f;
     }
 
-    /* P6 sobre las medias, con el cero ya actualizado */
-    mIc = mI - I0;
-    mQc = mQ - Q0;
-
-    /* P7: theta = atan2(mQc, mIc) en grados; "theta = 0" manda */
+    /* P7: theta = atan2(mQc, mIc) en grados, con el cero ya actualizado
+     * (si la etapa de cero esta desactivada, sin restarlo). "theta = 0" manda. */
     if ((ev & IQ_EV_CALIBRAR) != 0u) {
+        mIc = mI;
+        mQc = mQ;
+        if ((etapas & IQ_ETAPA_CERO) != 0u) {
+            mIc -= I0;
+            mQc -= Q0;
+        }
         fijar_theta(atan2f(mQc, mIc) * RAD_A_GRADOS);
     }
     if ((ev & IQ_EV_THETA_0) != 0u) {
         fijar_theta(0.0f);
     }
 
-    /* P8 y P10: medias de I', Q' con el cero y theta de este bloque */
-    mI1 = mIc * c_th + mQc * s_th;
-    mQ1 = mQc * c_th - mIc * s_th;
+    /* P6, P8 y P10: medias de I', Q' con el cero y theta de este bloque */
+    quitar_cero_y_rotar(mI, mQ, &mI1, &mQ1);
     b->V = sqrtf(mI1 * mI1 + mQ1 * mQ1);
     b->fase = atan2f(mQ1, mI1) * RAD_A_GRADOS;
     b->d = b->V / MV_POR_1E4;
@@ -255,22 +296,17 @@ static void cerrar_bloque(iq_bloque_t *b)
     b->theta = theta_deg;
     b->banderas = banderas_blk;
     b->eventos = ev;
+    b->etapas = etapas;
 
     reiniciar_bloque();
 }
 
 bool iq_procesar(const iq_codigos_t *c, iq_muestra_t *m, iq_bloque_t *b)
 {
-    float Ic, Qc;
+    escalar(c, m);                              /* P1-P3 */
+    quitar_cero_y_rotar(m->Ip, m->Qp, &m->I1, &m->Q1);  /* P6, P8 */
 
-    escalar(c, m);                      /* P1-P3 */
-
-    Ic = m->Ip - I0;                    /* P6 (cero vigente) */
-    Qc = m->Qp - Q0;
-    m->I1 = Ic * c_th + Qc * s_th;      /* P8: I' */
-    m->Q1 = Qc * c_th - Ic * s_th;      /*     Q' */
-
-    suma_Ip += m->Ip;                   /* P4 */
+    suma_Ip += m->Ip;                           /* P4 */
     suma_Qp += m->Qp;
     if (++n_blk < N_BLOQUE) {
         return false;

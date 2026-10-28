@@ -1,5 +1,5 @@
 /*
- * ajustes.c - Guarda I0, Q0, theta, G y la correccion de signo en la EEPROM
+ * ajustes.c - Guarda I0, Q0, theta, G y las etapas activas en la EEPROM
  * para conservarlos al apagar (seccion 10.8, opcional: USAR_EEPROM).
  *
  * Formato, 17 bytes desde 0xF000:
@@ -9,7 +9,7 @@
  *   6..9    Q0 (float, mV)
  *   10..13  theta (float, grados)
  *   14      G (2, 11 o 101)
- *   15      correccion de signo (0 / 1)
+ *   15      etapas activas (IQ_ETAPA_x: cero, theta, ganancia, normalizacion)
  *   16      complemento a 1 de la suma de los bytes 0..15
  *
  * La escritura no bloquea: cada byte tarda 4-5 ms, pero la CPU sigue
@@ -17,7 +17,8 @@
  * como mucho un byte por llamada, y solo los que han cambiado, asi que el
  * muestreo de 10 ms no se interrumpe. La suma de control se escribe la
  * ultima: si se corta la alimentacion a mitad, al arrancar se descartan
- * los datos y se usan los valores por defecto.
+ * los datos y se usan los valores por defecto. Los datos de la version 1 del
+ * formato (con la correccion de signo en el byte 15) tambien se descartan.
  */
 #include <string.h>
 #include "../mcc_generated_files/mcc.h"
@@ -26,7 +27,7 @@
 
 #define EE_BASE         0xF000u
 #define EE_MARCA        0x50u       /* 'P' */
-#define EE_VERSION      1u
+#define EE_VERSION      2u
 #define EE_TAM          17u
 #define EE_POS_SUMA     16u
 
@@ -86,13 +87,13 @@ bool ajustes_cargar(void)
     memcpy(&q0, &imagen[6], sizeof(float));
     memcpy(&th, &imagen[10], sizeof(float));
     if (!float_razonable(i0, 1.0e5f) || !float_razonable(q0, 1.0e5f) ||
-        !float_razonable(th, 180.0f) || (imagen[15] > 1u)) {
+        !float_razonable(th, 180.0f) || ((imagen[15] & (uint8_t)~IQ_ETAPAS_TODAS) != 0u)) {
         return false;
     }
     if (!iq_fijar_ganancia(imagen[14])) {
         return false;
     }
-    iq_fijar_corr_signo(imagen[15] != 0u);
+    (void)iq_fijar_etapas(imagen[15]);
     iq_fijar_calibracion(i0, q0, th);
     return true;
 }
@@ -108,7 +109,7 @@ void ajustes_guardar(void)
     memcpy(&imagen[6], &q0, sizeof(float));
     memcpy(&imagen[10], &th, sizeof(float));
     imagen[14] = iq_ganancia();
-    imagen[15] = iq_corr_signo() ? 1u : 0u;
+    imagen[15] = iq_etapas();
     imagen[EE_POS_SUMA] = suma_control(imagen, EE_POS_SUMA);
     pendiente = true;
 }

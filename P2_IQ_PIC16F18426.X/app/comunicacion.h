@@ -3,7 +3,7 @@
  *
  * Lineas que envia el PIC (texto, terminadas en CR LF):
  *   t_ms,Ip_uV,Qp_uV,I1_uV,Q1_uV                       una por muestra (100/s)
- *   B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas
+ *   B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas
  *                                                      una por bloque (10/s)
  *   P,I1_uV,Q1_uV                                      volcado de la traza ('p')
  *   # ...                                              comentarios y respuestas
@@ -11,8 +11,10 @@
  * Ordenes de un caracter que recibe:
  *   z fijar cero        x borrar cero      c calibrar theta    t theta = 0
  *   b borrar traza      2 / 1 / 0 ganancia x2 / x11 / x101
- *   s alternar la correccion de signo de I
  *   p volcar la traza   ? estado y ayuda
+ *   Z / T / G / N activar o desactivar la etapa de cero / theta / ganancia /
+ *                 normalizacion a VCC_A (las ordenes de una etapa desactivada
+ *                 se contestan como ignoradas)
  */
 #ifndef COMUNICACION_H
 #define COMUNICACION_H

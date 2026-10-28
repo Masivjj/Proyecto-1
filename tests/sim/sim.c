@@ -51,6 +51,9 @@ static const struct {
     {5.90, "2"},    /* ... y de vuelta a x2                 */
     {6.20, "q"},    /* orden desconocida                    */
     {9.00, "b"},    /* borrar traza                         */
+    {9.30, "Z"},    /* desactivar la etapa de cero ...      */
+    {9.45, "z"},    /* ... y "Fijar cero" se ignora         */
+    {9.60, "T"},    /* desactivar la etapa de theta         */
 };
 
 static void (*manejador_tmr2)(void);

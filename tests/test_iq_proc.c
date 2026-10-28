@@ -167,17 +167,14 @@ static void pruebas_4_a_8(void)
     comprobar("#8 |V| (mV)", b.V, r, 0.001);
 }
 
-static void pruebas_9_a_11(void)
+static void pruebas_10_y_11(void)
 {
     iq_muestra_t m;
     iq_bloque_t b;
 
-    printf("\n-- #9 a #11: signo de I y VCC_A\n");
-    iq_inicializar();
-    iq_fijar_corr_signo(false);
-    bloque(1.0, -0.5, 3.7, 0u, &m, &b);
-    comprobar("#9 sin correccion de signo: Ip (mV)", m.Ip, 500.0, 0.001);
-
+    /* #9 (desactivar la correccion de signo) ya no aplica: la correccion es
+     * fija en el firmware. */
+    printf("\n-- #10 y #11: VCC_A\n");
     iq_inicializar();
     bloque(1.0, -0.5, 3.0, 0u, &m, &b);
     comprobar("#10 Vcc = 3.0 V: Ip (mV) = -500 * 3.7/3.0", m.Ip, -500.0 * 3.7 / 3.0, 0.001);
@@ -233,6 +230,86 @@ static void prueba_12(void)
     comprobar("#12 radio minimo (mV)", radio_min, 250.0, 0.5);
     comprobar("#12 radio maximo (mV)", radio_max, 250.0, 0.5);
     comprobar("#12 giro en 0.99 s (grados; negativo = horario)", giro * 180.0 / PI, -4.0 * 360.0 * 0.99, 0.5);
+}
+
+/* Etapas que se activan y desactivan (ordenes Z, T, G y N) */
+static void pruebas_etapas(void)
+{
+    iq_muestra_t m;
+    iq_bloque_t b;
+    const double r = 150.0 * sqrt(2.0);
+
+    printf("\n-- Etapas activables: cero, theta, ganancia y normalizacion\n");
+    iq_inicializar();
+    comprobar_cond("al arrancar estan las cuatro activas", iq_etapas() == IQ_ETAPAS_TODAS);
+    comprobar_cond("iq_fijar_etapas ignora los bits que no son etapas", iq_fijar_etapas(0xFFu) == IQ_ETAPAS_TODAS);
+
+    /* Ganancia */
+    iq_fijar_ganancia(11u);
+    iq_fijar_etapas(IQ_ETAPAS_TODAS & (uint8_t)~IQ_ETAPA_GANANCIA);
+    bloque(1.0, -0.5, 3.7, 0u, &m, &b);
+    comprobar("ganancia desactivada (G = 11 sin aplicar): Ip (mV)", m.Ip, -1000.0, 0.001);
+    comprobar("ganancia desactivada: Qp (mV)", m.Qp, -500.0, 0.001);
+    comprobar_cond("el bloque informa de las etapas activas", b.etapas == (IQ_ETAPAS_TODAS & (uint8_t)~IQ_ETAPA_GANANCIA));
+    iq_fijar_etapas(IQ_ETAPAS_TODAS);
+    bloque(1.0, -0.5, 3.7, 0u, &m, &b);
+    comprobar("ganancia activada de nuevo: Ip (mV) = -1000 / 11", m.Ip, -1000.0 / 11.0, 0.001);
+
+    /* Normalizacion a VCC_A */
+    iq_inicializar();
+    iq_fijar_etapas(IQ_ETAPAS_TODAS & (uint8_t)~IQ_ETAPA_NORMALIZACION);
+    bloque(1.0, -0.5, 3.0, 0u, &m, &b);
+    comprobar("normalizacion desactivada, Vcc = 3.0 V: Ip (mV) sin 3.7/3.0", m.Ip, -500.0, 0.001);
+    comprobar("normalizacion desactivada: Qp (mV)", m.Qp, -250.0, 0.001);
+    comprobar("normalizacion desactivada: VCC_A se sigue midiendo (V)", b.vcc, 3.0, 0.001);
+    iq_fijar_etapas(IQ_ETAPA_CERO | IQ_ETAPA_THETA);
+    bloque(1.0, -0.5, 3.0, 0u, &m, &b);
+    comprobar("ganancia y normalizacion desactivadas: Ip = voltios crudos (mV)", m.Ip, -1000.0, 0.001);
+    iq_fijar_etapas(IQ_ETAPAS_TODAS);
+    bloque(1.0, -0.5, 3.0, 0u, &m, &b);
+    comprobar("normalizacion activada de nuevo: Ip (mV)", m.Ip, -500.0 * 3.7 / 3.0, 0.001);
+
+    /* Cero */
+    iq_inicializar();
+    bloque(1.0, -0.5, 3.7, IQ_EV_FIJAR_CERO, &m, &b);
+    iq_fijar_etapas(IQ_ETAPAS_TODAS & (uint8_t)~IQ_ETAPA_CERO);
+    bloque(1.0, -0.5, 3.7, 0u, &m, &b);
+    comprobar("cero desactivado: I' = Ip (mV)", m.I1, -500.0, 0.001);
+    comprobar("cero desactivado: Q' = Qp (mV)", m.Q1, -250.0, 0.001);
+    comprobar("cero desactivado: |V| sin restar el cero (mV)", b.V, hypot(500.0, 250.0), 0.001);
+    bloque(1.2, -0.5, 3.7, IQ_EV_FIJAR_CERO | IQ_EV_BORRAR_CERO, &m, &b);
+    comprobar("cero desactivado: \"Fijar cero\" y \"Borrar 0\" se ignoran (I0)", b.I0, -500.0, 0.001);
+    comprobar_cond("cero desactivado: los eventos ignorados no se devuelven",
+                   (b.eventos & (IQ_EV_FIJAR_CERO | IQ_EV_BORRAR_CERO)) == 0u);
+    iq_fijar_etapas(IQ_ETAPAS_TODAS);
+    bloque(1.2, -0.5, 3.7, 0u, &m, &b);
+    comprobar("cero activado de nuevo: vuelve el cero guardado (I', mV)", m.I1, -100.0, 0.001);
+
+    /* Theta */
+    bloque(1.3, -0.2, 3.7, IQ_EV_CALIBRAR, &m, &b);
+    iq_fijar_etapas(IQ_ETAPAS_TODAS & (uint8_t)~IQ_ETAPA_THETA);
+    bloque(1.3, -0.2, 3.7, 0u, &m, &b);
+    comprobar("theta desactivado: I' = Ic (mV)", m.I1, -150.0, 0.001);
+    comprobar("theta desactivado: Q' = Qc (mV)", m.Q1, 150.0, 0.001);
+    comprobar("theta desactivado: Fase sin rotar (grados)", b.fase, 135.0, 0.001);
+    comprobar("theta desactivado: |V| no cambia (mV)", b.V, r, 0.001);
+    bloque(1.6, 0.1, 3.7, IQ_EV_CALIBRAR, &m, &b);
+    comprobar("theta desactivado: \"Calibrar theta\" se ignora", b.theta, 135.0, 0.001);
+    bloque(1.6, 0.1, 3.7, IQ_EV_THETA_0, &m, &b);
+    comprobar("theta desactivado: \"theta = 0\" se ignora", b.theta, 135.0, 0.001);
+    iq_fijar_etapas(IQ_ETAPAS_TODAS);
+    bloque(1.6, 0.1, 3.7, 0u, &m, &b);
+    comprobar("theta activado de nuevo: I' (mV)", m.I1, 2.0 * r, 0.001);
+    comprobar("theta activado de nuevo: Q' (mV)", m.Q1, 0.0, 0.001);
+
+    /* Calibrar theta con el cero desactivado: theta de la senal sin restar el cero */
+    iq_inicializar();
+    bloque(1.0, -0.5, 3.7, IQ_EV_FIJAR_CERO, &m, &b);
+    iq_fijar_etapas(IQ_ETAPAS_TODAS & (uint8_t)~IQ_ETAPA_CERO);
+    bloque(1.0, -0.5, 3.7, IQ_EV_CALIBRAR, &m, &b);
+    comprobar("calibrar con el cero desactivado: theta = atan2(Qp, Ip)", b.theta,
+              atan2(-250.0, -500.0) * 180.0 / PI, 0.001);
+    comprobar("... y el lift-off cae en 0 grados", b.fase, 0.0, 0.001);
 }
 
 static void pruebas_extra(void)
@@ -328,7 +405,8 @@ int main(void)
     printf("Pruebas del procesamiento I/Q (seccion 9.1) con iq_proc.c del firmware\n");
     pruebas_1_a_3();
     pruebas_4_a_8();
-    pruebas_9_a_11();
+    pruebas_10_y_11();
+    pruebas_etapas();
     prueba_12();
     pruebas_extra();
     pruebas_formato();

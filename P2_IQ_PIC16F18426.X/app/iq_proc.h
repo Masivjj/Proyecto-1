@@ -3,7 +3,7 @@
  *
  * Reproduce, en el mismo orden, las etapas de la especificacion (seccion 4):
  *   P1  VCC_A y proteccion de 2.5 V
- *   P2  factor de escala k (ratiometrico) y signo de I
+ *   P2  factor de escala k (ratiometrico) y signo de I (corregido siempre)
  *   P3  senales procesadas Ip, Qp (mV a la salida del mezclador, a 3.7 V)
  *   P4  medias del bloque
  *   P5  cero I0, Q0 ("Fijar cero" / "Borrar 0")
@@ -12,6 +12,9 @@
  *   P8  rotacion por -theta: senales finales I', Q'
  *   P10 indicadores del bloque: |V|, Fase y d estimada
  * La traza del plano polar (P9) esta en traza.c.
+ *
+ * Las etapas de cero, theta, ganancia y normalizacion a VCC_A se activan y
+ * desactivan en marcha con iq_fijar_etapas() (ordenes Z, T, G y N por UART).
  *
  * El modulo no toca el hardware: compila igual con XC8 y con gcc, y se
  * comprueba en el PC con los vectores de prueba de la seccion 9
@@ -50,7 +53,18 @@ typedef struct {
     float   vcc;        /* VCC_A medio del bloque (V); 0 si no se pudo medir     */
     uint8_t banderas;   /* IQ_FL_x                                               */
     uint8_t eventos;    /* IQ_EV_x aplicados al cerrar este bloque               */
+    uint8_t etapas;     /* IQ_ETAPA_x activas al cerrar este bloque              */
 } iq_bloque_t;
+
+/* Etapas que se pueden desactivar. Desactivada, la etapa no actua sobre la
+ * senal y sus ordenes se ignoran, pero lo guardado (I0, Q0, theta, G) se
+ * conserva y vuelve a aplicarse al activarla. */
+#define IQ_ETAPA_CERO           0x01u   /* P5-P6: restar I0, Q0; Fijar cero / Borrar 0      */
+#define IQ_ETAPA_THETA          0x02u   /* P7-P8: rotar por -theta; Calibrar theta / theta=0 */
+#define IQ_ETAPA_GANANCIA       0x04u   /* P2: dividir por G (desactivada: G = 1)           */
+#define IQ_ETAPA_NORMALIZACION  0x08u   /* P1-P2: normalizar a VCC_A = 3.7 V (desactivada:
+                                         * voltios absolutos medidos con el FVR)            */
+#define IQ_ETAPAS_TODAS         0x0Fu
 
 /* Eventos: equivalen a los botones "latch" del VI. Cada uno vale un bloque y
  * se aplica al cerrar el bloque en curso. */
@@ -71,13 +85,17 @@ typedef struct {
 #define IQ_FL_ALARMA        (IQ_FL_VCC_FUERA | IQ_FL_SAT_I | IQ_FL_SAT_Q | IQ_FL_SAT_VCC)
 
 /* Pone el estado como al arrancar el VI: I0 = Q0 = 0, theta = 0,
- * G = GANANCIA_INICIAL y correccion de signo = CORR_SIGNO_INICIAL. */
+ * G = GANANCIA_INICIAL y etapas = ETAPAS_INICIALES. */
 void    iq_inicializar(void);
 
 bool    iq_fijar_ganancia(uint8_t g);           /* 2, 11 o 101; false si no vale */
 uint8_t iq_ganancia(void);
-void    iq_fijar_corr_signo(bool activa);
-bool    iq_corr_signo(void);
+
+/* Fija las etapas activas (mascara IQ_ETAPA_x) y devuelve las que quedan
+ * activas: sin FVR (USAR_FVR = 0) la normalizacion no se puede desactivar.
+ * Para alternar una: iq_fijar_etapas(iq_etapas() ^ IQ_ETAPA_CERO). */
+uint8_t iq_fijar_etapas(uint8_t activas);
+uint8_t iq_etapas(void);
 
 void    iq_fijar_calibracion(float i0, float q0, float theta_grados);
 void    iq_leer_calibracion(float *i0, float *q0, float *theta_grados);
