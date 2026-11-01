@@ -21,7 +21,11 @@
  * calcula atan2, sin y cos), las tramas esperan en la cola: las muestras se
  * tomaron a su hora y no se pierden mientras quepan (N_COLA_TRAMAS).
  *
- * El LED (RA5) da un destello de 50 ms cada segundo mientras todo va bien y
+ * El reloj es el HFINTOSC a 32 MHz o, con la opcion RELOJ (app/app_config.h),
+ * un cristal u oscilador de 4 MHz con el PLL x4 (16 MHz), con el HFINTOSC a
+ * 16 MHz de reserva si falta o falla (reloj.c).
+ *
+ * El LED (RA5; RA0 con reloj externo) da un destello de 50 ms cada segundo mientras todo va bien y
  * se queda encendido si el ultimo bloque tuvo VCC_A fuera de rango o alguna
  * salida saturada.
  */
@@ -32,6 +36,7 @@
 #include "app/botones.h"
 #include "app/comunicacion.h"
 #include "app/iq_proc.h"
+#include "app/reloj.h"
 #include "app/traza.h"
 
 #define LED_PERIODO_TRAMAS      100u    /* destello de vida cada 1 s */
@@ -78,11 +83,17 @@ static void atender_muestra(const iq_codigos_t *c, uint32_t t_ms, uint32_t muest
             ajustes_guardar();
         }
         b.banderas |= banderas_lazo;
+        if (reloj_estado() == RELOJ_EST_RESERVA) {
+            b.banderas |= IQ_FL_RELOJ;
+        }
         banderas_lazo = 0u;
         alarma = ((b.banderas & IQ_FL_ALARMA) != 0u);
         com_bloque(&b);
     }
 
+    if (reloj_tarea()) {
+        com_aviso_reloj();              /* el reloj externo se ha parado */
+    }
     ev = botones_tarea();
     if (ev != 0u) {
         iq_evento(ev);
@@ -107,6 +118,7 @@ void main(void)
 
     // initialize the device
     SYSTEM_Initialize();
+    reloj_inicializar();                /* reloj externo de 4 MHz, si se eligio */
 
     iq_inicializar();
     cargados = ajustes_cargar();

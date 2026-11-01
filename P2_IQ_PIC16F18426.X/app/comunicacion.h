@@ -30,6 +30,8 @@ void com_bienvenida(bool ajustes_cargados);
 void com_muestra(uint32_t t_ms, const iq_muestra_t *m);
 void com_bloque(const iq_bloque_t *b);
 void com_eventos_boton(uint8_t eventos);
+/* Aviso inmediato de que el reloj externo ha fallado (reloj_tarea) */
+void com_aviso_reloj(void);
 
 /* Llamar cada 10 ms: atiende las ordenes recibidas y envia el siguiente
  * punto del volcado de la traza, si lo hay. */

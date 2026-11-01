@@ -53,6 +53,55 @@
  * seccion 1.3) ya no es una opcion: se aplica siempre (iq_proc.c, P3). */
 
 /* ------------------------------------------------------------------------
+ * Reloj del sistema (docs/reloj_externo_4MHz.md)
+ *
+ * RELOJ_INTERNO         HFINTOSC del PIC a 32 MHz (como hasta ahora). LED en
+ *                       RA5, "Calibrar theta" en RA4, disparo del PWM6 en RA1.
+ * RELOJ_CRISTAL_4MHZ    cristal de cuarzo de 4 MHz entre RA5 (OSC1, pin 2) y
+ *                       RA4 (OSC2, pin 3), con sus dos condensadores. El PLL
+ *                       x4 da FOSC = 16 MHz. El LED pasa a RA0 (pin 13) y
+ *                       "Calibrar theta" a RA1 (pin 12), asi que el disparo
+ *                       del PWM6 ya no sale por RA1 (salvo SALIDA_DISPARO=1,
+ *                       que deja sin ese pulsador: queda la orden 'c').
+ * RELOJ_OSCILADOR_4MHZ  oscilador de cuarzo de 4 MHz con salida CMOS (modulo
+ *                       de 4 patas) a RA5 (CLKIN, pin 2). PLL x4 = 16 MHz.
+ *                       Solo el LED cambia de pin: pasa a RA0 (pin 13).
+ *
+ * Con reloj externo el PIC arranca con el HFINTOSC a 16 MHz y pasa al
+ * externo (app/reloj.c). Si el externo no arranca en 100 ms, o se para
+ * despues (monitor de fallos FSCM), sigue con el HFINTOSC a 16 MHz: las
+ * mismas frecuencias de muestreo, con su +-2 %. La orden '?' dice que reloj
+ * esta en uso y los bloques llevan la bandera 64 mientras se usa el de
+ * reserva. Los registros de MCC tienen los valores de cada caso (#if RELOJ).
+ *
+ * El modo se elige al compilar (aqui o en Project Properties > XC8 Compiler >
+ * Preprocessing > Define macros, por ejemplo RELOJ=1): los bits de
+ * configuracion del oscilador y el uso de RA4/RA5 no pueden cambiar en marcha.
+ * ------------------------------------------------------------------------ */
+#define RELOJ_INTERNO           0
+#define RELOJ_CRISTAL_4MHZ      1
+#define RELOJ_OSCILADOR_4MHZ    2
+#ifndef RELOJ
+#define RELOJ               RELOJ_INTERNO
+#endif
+
+#if RELOJ == RELOJ_INTERNO
+#define FOSC_HZ             32000000UL  /* HFINTOSC, OSCFRQ = 32 MHz                 */
+#elif (RELOJ == RELOJ_CRISTAL_4MHZ) || (RELOJ == RELOJ_OSCILADOR_4MHZ)
+#define FOSC_HZ             16000000UL  /* 4 MHz x PLL 4 (o HFINTOSC a 16 MHz de reserva) */
+#else
+#error "RELOJ debe ser RELOJ_INTERNO (0), RELOJ_CRISTAL_4MHZ (1) o RELOJ_OSCILADOR_4MHZ (2)"
+#endif
+#define RELOJ_EXTERNO       (RELOJ != RELOJ_INTERNO)
+#define F_EXTERNO_HZ        4000000UL
+
+/* Cristal: 0 = modo HS (ganancia alta: arranque seguro a 4 MHz, el limite
+ * entre XT y HS), 1 = modo XT (ganancia media, menos potencia en el cristal) */
+#ifndef CRISTAL_XT
+#define CRISTAL_XT          0
+#endif
+
+/* ------------------------------------------------------------------------
  * Adquisicion (seccion 10.4 y docs/analisis_adc_jitter.md)
  *
  * ADC en modo basico. Cada conversion la dispara por hardware el flanco de
@@ -70,7 +119,8 @@
 #define PERIODO_MS          10u     /* una muestra de salida (trama) cada 10 ms (100 S/s) */
 #define N_BLOQUE            10u     /* 10 muestras = 0.1 s, como el bloque de LabVIEW     */
 #define ADC_CUENTAS         4095u   /* fondo de escala del ADC de 12 bits                 */
-#define PERIODO_DISPARO_US  100u    /* periodo del PWM6 = TMR2 (FOSC/4, 1:4, T2PR = 199)  */
+#define PERIODO_DISPARO_US  100u    /* periodo del PWM6 = TMR2: FOSC/4, T2PR = 199 y      */
+                                    /* prescaler 1:4 (32 MHz) o 1:2 (16 MHz)              */
 #define DISPAROS_POR_RONDA  10u     /* 6 canales + 4 libres = 1 ms                        */
 #define PERIODO_MUESTREO_US (PERIODO_DISPARO_US * DISPAROS_POR_RONDA)  /* 1000 us por canal */
 #define MUESTRAS_POR_S      (1000000u / PERIODO_MUESTREO_US)           /* 1000 S/s por canal */
@@ -81,10 +131,20 @@
 
 /* 1: el PWM6 (instante de cada conversion) sale por RA1 para medir su
  * jitter con un osciloscopio. RA1 es ICSPCLK: en las compilaciones de
- * depuracion (__DEBUG) no se usa, para no molestar al depurador. */
+ * depuracion (__DEBUG) no se usa, para no molestar al depurador.
+ * Con el cristal, RA1 es el pulsador "Calibrar theta" y vale 0 por defecto. */
 #ifndef SALIDA_DISPARO
+#if RELOJ == RELOJ_CRISTAL_4MHZ
+#define SALIDA_DISPARO      0
+#else
 #define SALIDA_DISPARO      1
 #endif
+#endif
+
+/* Pulsador "Calibrar theta": RA4, o RA1 si el cristal ocupa RA4. Sin el en
+ * las compilaciones de depuracion con cristal (RA1 es del depurador) y con
+ * cristal y SALIDA_DISPARO = 1: entonces solo queda la orden 'c'. */
+#define BOTON_THETA_EN_RA1  ((RELOJ == RELOJ_CRISTAL_4MHZ) && !SALIDA_DISPARO)
 
 /* 1: convertir tambien el FVR (1.024 V) para conocer VCC_A en voltios. Hace
  *    posible la proteccion de 2.5 V y el LED "VCC_A fuera de rango" (P1).
@@ -111,6 +171,6 @@
 #define USAR_EEPROM         1       /* 1: guardar I0, Q0, theta, G y etapas en la EEPROM  */
 #endif
 
-#define VERSION_FIRMWARE    "1.3"
+#define VERSION_FIRMWARE    "1.4"
 
 #endif /* APP_CONFIG_H */

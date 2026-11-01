@@ -8,7 +8,8 @@
   @Description
     RC0..RC3 analogicos (I_OUT, Q_OUT, V_REF, VCC_A); RC4 = TX1 y RC5 = RX1
     por PPS; RA2 y RA4 entradas digitales con pull-up (pulsadores); RA5 salida
-    (LED); RA0 y RA1 sin uso (analogicos). Equivalente a lo que genera MCC
+    (LED); RA0 y RA1 sin uso (analogicos). Con reloj externo cambian RA0, RA1,
+    RA4 y RA5: ver la tabla de pin_manager.h. Equivalente a lo que genera MCC
     Classic con docs/configuracion_MCC_Classic.md.
 */
 
@@ -26,19 +27,19 @@ void PIN_MANAGER_Initialize(void)
     /**
     TRISx registers
     */
-    TRISA = 0x1F;
+    TRISA = PINES_TRISA;      /* 0x1F con reloj interno (pin_manager.h) */
     TRISC = 0x2F;
 
     /**
     ANSELx registers
     */
     ANSELC = 0x0F;
-    ANSELA = 0x03;
+    ANSELA = PINES_ANSELA;    /* 0x03 con reloj interno */
 
     /**
     WPUx registers
     */
-    WPUA = 0x14;
+    WPUA = PINES_WPUA;        /* 0x14 con reloj interno */
     WPUC = 0x00;
 
     /**

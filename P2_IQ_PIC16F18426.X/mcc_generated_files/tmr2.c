@@ -16,6 +16,7 @@
 
 #include <xc.h>
 #include "tmr2.h"
+#include "device_config.h"    /* opcion RELOJ: prescaler */
 
 /**
   Section: Global Variables Definitions
@@ -47,8 +48,13 @@ void TMR2_Initialize(void)
     // Clearing IF flag.
     PIR4bits.TMR2IF = 0;
 
-    // T2CKPS 1:4; T2OUTPS 1:1; TMR2ON on;
+#if RELOJ_EXTERNO
+    // T2CKPS 1:2; T2OUTPS 1:1; TMR2ON on;  (16 MHz: 4 MHz / 2 / 200 = 100 us)
+    T2CON = 0x90;
+#else
+    // T2CKPS 1:4; T2OUTPS 1:1; TMR2ON on;  (32 MHz: 8 MHz / 4 / 200 = 100 us)
     T2CON = 0xA0;
+#endif
 }
 
 void TMR2_ModeSet(TMR2_HLT_MODE mode)

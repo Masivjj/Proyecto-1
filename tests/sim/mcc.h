@@ -14,12 +14,13 @@
 /* Registros (solo los campos que usa la aplicacion) */
 typedef struct { unsigned ADCONT : 1; unsigned ADCS : 1; } sim_adcon0_t;
 typedef struct { unsigned ADMD : 3; } sim_adcon2_t;
-typedef struct { unsigned ADIF : 1; } sim_pir1_t;
+typedef struct { unsigned ADIF : 1; unsigned OSFIF : 1; } sim_pir1_t;
 typedef struct { unsigned ADIE : 1; } sim_pie1_t;
 typedef struct { unsigned ANSA1 : 1; } sim_ansela_t;
 typedef struct { unsigned TRISA1 : 1; } sim_trisa_t;
 typedef struct { unsigned SLRA1 : 1; } sim_slrcona_t;
 typedef struct { unsigned GIE : 1; unsigned PEIE : 1; } sim_intcon_t;
+typedef struct { unsigned COSC : 3; } sim_osccon2_t;
 typedef struct { unsigned NVMREGS : 1; unsigned WREN : 1; unsigned WR : 1; unsigned RD : 1; } sim_nvmcon1_t;
 
 extern sim_adcon0_t ADCON0bits;
@@ -33,6 +34,12 @@ extern uint8_t ADPCH, ADACT, RA1PPS;
 extern sim_intcon_t INTCONbits;
 extern volatile sim_nvmcon1_t NVMCON1bits;
 extern uint8_t NVMADRH, NVMADRL, NVMDATL, NVMCON2;
+
+/* Oscilador (app/reloj.c): sim.c decide cuando arranca o falla el externo */
+extern uint8_t OSCCON1;
+sim_osccon2_t *sim_osccon2(void);
+#define OSCCON2bits             (*sim_osccon2())
+#define __delay_us(x)           ((void)0)
 
 /* Drivers de MCC */
 void SYSTEM_Initialize(void);

@@ -18,6 +18,14 @@
                     <name>default</name>
                     <type>2</type>
                 </confElem>
+                <confElem>
+                    <name>cristal_4MHz</name>
+                    <type>2</type>
+                </confElem>
+                <confElem>
+                    <name>oscilador_4MHz</name>
+                    <type>2</type>
+                </confElem>
             </confList>
             <formatting>
                 <project-formatting-style>false</project-formatting-style>

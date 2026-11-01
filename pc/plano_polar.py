@@ -58,6 +58,7 @@ AVISOS = (
     (0x08, "VCC_A ≥ VDD del PIC"),
     (0x10, "sin lectura del FVR"),
     (0x20, "se descartaron muestras"),
+    (0x40, "sin el reloj externo de 4 MHz: HFINTOSC de reserva"),
 )
 
 TECLAS = {

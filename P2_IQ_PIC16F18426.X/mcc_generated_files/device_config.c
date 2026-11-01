@@ -9,12 +9,29 @@
     HFINTOSC a 32 MHz desde el arranque, MCLR activo, BOR a 2.45 V, WDT
     desactivado y programacion en baja tension (LVP). Equivalente a lo que
     genera MCC Classic con docs/configuracion_MCC_Classic.md.
+
+    FEXTOSC depende de la opcion RELOJ (app/app_config.h): OFF con el reloj
+    interno, HS (o XT) con el cristal de 4 MHz y ECM con el oscilador de
+    4 MHz. Se arranca siempre con el HFINTOSC; app/reloj.c pasa al externo.
+    Si se regenera con MCC, hay que volver a poner este #if.
 */
+
+#include "device_config.h"
 
 // Configuration bits: selected in the GUI
 
 // CONFIG1
+#if RELOJ == RELOJ_CRISTAL_4MHZ
+#if CRISTAL_XT
+#pragma config FEXTOSC = XT    // External Oscillator mode selection bits->XT (crystal oscillator) above 500kHz, below 4MHz; PFM set to medium power
+#else
+#pragma config FEXTOSC = HS    // External Oscillator mode selection bits->HS (crystal oscillator) above 4MHz; PFM set to high power
+#endif
+#elif RELOJ == RELOJ_OSCILADOR_4MHZ
+#pragma config FEXTOSC = ECM    // External Oscillator mode selection bits->EC for 500kHz to 8MHz; PFM set to medium power
+#else
 #pragma config FEXTOSC = OFF    // External Oscillator mode selection bits->Oscillator not enabled
+#endif
 #pragma config RSTOSC = HFINT32    // Power-up default value for COSC bits->HFINTOSC with OSCFRQ= 32 MHz and CDIV = 1:1
 #pragma config CLKOUTEN = OFF    // Clock Out Enable bit->CLKOUT function is disabled; i/o or oscillator function on OSC2
 #pragma config CSWEN = ON    // Clock Switch Enable bit->Writing to NOSC and NDIV is allowed

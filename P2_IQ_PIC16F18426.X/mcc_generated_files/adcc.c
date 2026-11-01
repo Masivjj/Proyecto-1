@@ -16,6 +16,7 @@
 
 #include <xc.h>
 #include "adcc.h"
+#include "device_config.h"    /* opcion RELOJ: ADCLK */
 
 /**
   Section: ADCC Module Variables
@@ -69,8 +70,13 @@ void ADCC_Initialize(void)
     ADREF = 0x00;
     // ADACT PWM6_OUT;
     ADACT = 0x0E;
-    // ADCS FOSC/32;
+#if RELOJ_EXTERNO
+    // ADCS FOSC/16;  (16 MHz: TAD = 1 us)
+    ADCLK = 0x07;
+#else
+    // ADCS FOSC/32;  (32 MHz: TAD = 1 us)
     ADCLK = 0x0F;
+#endif
     // ADGO stop; ADFM right; ADON enabled; ADCS FOSC/ADCLK; ADCONT disabled;
     ADCON0 = 0x84;
 

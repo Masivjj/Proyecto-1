@@ -86,6 +86,7 @@ typedef struct {
 #define IQ_FL_SAT_VCC       0x08u   /* VCC_A >= VDD: la normalizacion no es fiable      */
 #define IQ_FL_SIN_FVR       0x10u   /* sin lectura valida del FVR: VCC_A en V desconocido */
 #define IQ_FL_RETRASO       0x20u   /* (main.c) se descartaron tramas: cola llena       */
+#define IQ_FL_RELOJ         0x40u   /* (main.c) sin el reloj externo: HFINTOSC de reserva */
 #define IQ_FL_ALARMA        (IQ_FL_VCC_FUERA | IQ_FL_SAT_I | IQ_FL_SAT_Q | IQ_FL_SAT_VCC)
 
 /* Pone el estado como al arrancar el VI: I0 = Q0 = 0, theta = 0,

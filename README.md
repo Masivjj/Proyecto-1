@@ -14,6 +14,8 @@ La especificación de partida está en [`docs/P2_IQ_procesamiento_para_PIC16F184
 
 **Avance separado: solo el ADC a 1000 muestras/s.** El proyecto [`ADC_1kSPS_PIC16F18426.X`](ADC_1kSPS_PIC16F18426.X) muestrea una señal de un generador en RC0, disparada por el PWM6 cada 1 ms, y envía cada muestra por la UART. [`pc/adc_1ksps.py`](pc/adc_1ksps.py) la dibuja con su espectro, SNR y ENOB. Guía de montaje y presentación: [`docs/avance_adc_1ksps.md`](docs/avance_adc_1ksps.md).
 
+**Reloj externo de 4 MHz (opcional):** el firmware completo funciona con el oscilador interno (32 MHz, por defecto) o con un cristal u oscilador de cuarzo de 4 MHz y el PLL ×4 (16 MHz), que se elige al compilar con la opción `RELOJ` o con las configuraciones `cristal_4MHz` y `oscilador_4MHz` de MPLAB X. Si el reloj externo falta o se para, sigue con el oscilador interno a 16 MHz y lo avisa. Conexiones, pines que cambian y registros: [`docs/reloj_externo_4MHz.md`](docs/reloj_externo_4MHz.md).
+
 **Prueba en la placa con LabVIEW y una NI USB-6211** (los dos proyectos): AO 0 como generador, AI 0 como referencia y un contador en RA1 miden la frecuencia de muestreo real, la amplitud y el SNR. Diagrama de bloques del VI en [`docs/pruebas_labview_usb6211.md`](docs/pruebas_labview_usb6211.md); lo mismo en Python con `nidaqmx` en [`pc/prueba_usb6211.py`](pc/prueba_usb6211.py).
 
 ## Estado de la verificación
@@ -27,6 +29,7 @@ La especificación de partida está en [`docs/P2_IQ_procesamiento_para_PIC16F184
 | Nombres de registros y bits | todos los `.c` de los dos proyectos contra el `pic16f18426.h` oficial (DFP 1.32.471) con gcc (repetido tras el cambio a 1 kS/s); las 146 macros de pines; los `#pragma config` contra el `cfgdata` del dispositivo | sin errores |
 | Programa del PC | `tests/test_plano_polar.py` (19/19) y prueba sin ventana con `--demo` y `--archivo` | correcto |
 | Prueba con la USB-6211 (`pc/prueba_usb6211.py`) | `tests/test_prueba_usb6211.py`: generador limitado a 0–3.3 V, fs por el contador y por el cociente de frecuencias, y fallos provocados (fs +3 %, firmware sin `# ADC:`, amplitud, pérdidas, saturación). La API de `nidaqmx` se revisó contra su código fuente (1.7.0); sin la tarjeta no se ha ejecutado | 25/25 |
+| Opción de reloj externo de 4 MHz (`RELOJ`) | `make reloj`: registros de MCC en cada modo (FOSC, TMR2 de 100 µs, PWM6, TAD de 1 µs, baudios, bits de configuración) y puerto A en 9 casos. Firmware simulado con cristal y con oscilador: reloj bien, ausente y parándose. Los `.c` contra el `pic16f18426.h` oficial en 12 combinaciones con `-Wundef` | todo correcto |
 | **Compilación con XC8** | **no se ha podido ejecutar XC8 en el entorno donde se escribió** | **pendiente: compilar en MPLAB X** |
 | Hardware real (incluido el jitter del HFINTOSC) | — | pendiente: `pc/prueba_usb6211.py` o el VI (fs = 1000 S/s), `m` y `pc/medir_jitter.py` (jitter) |
 
@@ -45,6 +48,7 @@ P2_IQ_PIC16F18426.X/            proyecto de MPLAB X (abrir esta carpeta)
 │   ├── traza.c/.h              traza del plano polar (P9), buffer circular
 │   ├── ajustes.c/.h            I0, Q0, θ, G y etapas en EEPROM (escritura sin bloqueo)
 │   ├── botones.c/.h            pulsadores con antirrebote
+│   ├── reloj.c/.h              reloj externo de 4 MHz con PLL x4 y reserva con el HFINTOSC (opción RELOJ)
 │   └── formato.c/.h            números a texto sin printf
 ├── mcc_generated_files/        drivers de MCC Classic (ver docs/configuracion_MCC_Classic.md)
 └── nbproject/, Makefile        archivos del proyecto de MPLAB X
@@ -61,12 +65,12 @@ docs/                           especificación, guía de MCC Classic y análisi
 
 1. **Abrir** `P2_IQ_PIC16F18426.X` en MPLAB X (*File > Open Project*). Si no tienes XC8 v2.50, elige el que tengas (v2.40 o posterior) en *Project Properties > Compiler Toolchain*.
 2. En *Project Properties > XC8 Global Options* comprueba **C99** y **float y double de 32 bits** (si no, la compilación se detiene con un error en `iq_proc.c`).
-3. Elige la herramienta (PICkit 4/5, MPLAB Snap…) y pulsa *Make and Program Device*.
+3. Elige la configuración del reloj en la barra de herramientas: `default` (oscilador interno), `cristal_4MHz` u `oscilador_4MHz` ([`docs/reloj_externo_4MHz.md`](docs/reloj_externo_4MHz.md)). Elige la herramienta (PICkit 4/5, MPLAB Snap…) y pulsa *Make and Program Device*.
 4. En `app/app_config.h`, `GANANCIA_INICIAL` debe coincidir con los jumpers JP701/JP702 (o cámbiala luego con las órdenes `2`, `1`, `0`; queda guardada en la EEPROM).
 5. En el PC: `pip install -r pc/requirements.txt` y `python pc/plano_polar.py --puerto COM5` (Windows) o `--puerto /dev/ttyUSB0` (Linux). `--listar` muestra los puertos.
 6. Calibración, como en el VI:
    - sonda quieta sobre metal sano → **Fijar cero** (pulsador RA2, tecla `z` o botón);
-   - sonda quieta sobre papel (lift-off conocido) → **Calibrar θ** (pulsador RA4, tecla `c` o botón). Desde entonces el lift-off cae sobre 0° y una fisura se aparta de 0°/180°.
+   - sonda quieta sobre papel (lift-off conocido) → **Calibrar θ** (pulsador RA4, o RA1 con el cristal; tecla `c` o botón). Desde entonces el lift-off cae sobre 0° y una fisura se aparta de 0°/180°.
 
 Para probar el programa del PC sin hardware: `python pc/plano_polar.py --demo`.
 
@@ -85,11 +89,11 @@ La configuración de los periféricos está documentada paso a paso en [`docs/co
 | 6 RC4 | TX (115200 8N1) | RX del adaptador USB-serie |
 | 5 RC5 | RX | TX del adaptador USB-serie |
 | 11 RA2 | pulsador "Fijar cero" | a GND (pull-up interno) |
-| 3 RA4 | pulsador "Calibrar θ" | a GND (pull-up interno) |
-| 2 RA5 | LED | LED + resistencia de 1 kΩ a GND |
+| 3 RA4 | pulsador "Calibrar θ" | a GND (pull-up interno). Con el cristal de 4 MHz: OSC2 |
+| 2 RA5 | LED | LED + resistencia de 1 kΩ a GND. Con reloj externo de 4 MHz: OSC1/CLKIN, y el LED pasa a RA0 |
 | 4 RA3 / MCLR | reset | 10 kΩ a VDD; al programador |
-| 13 RA0 | ICSPDAT | al programador |
-| 12 RA1 | ICSPCLK; en producción, salida del disparo (PWM6, 10 kHz) | al programador; punta del osciloscopio para medir el jitter |
+| 13 RA0 | ICSPDAT; con reloj externo, LED | al programador |
+| 12 RA1 | ICSPCLK; en producción, salida del disparo (PWM6, 10 kHz); con el cristal, pulsador "Calibrar θ" | al programador; punta del osciloscopio para medir el jitter |
 
 - **VCC_A no debe superar VDD del PIC**: si lo hace, el ADC satura en ese canal (el PC muestra el aviso "VCC_A ≥ VDD del PIC"). Si puede pasar, monta un divisor 1:2 (2 × 10 kΩ) en la entrada de VCC_A y pon `DIVISOR_VCCA 2` en `app_config.h`.
 - El adaptador USB-serie debe trabajar con niveles de 3.3 V a 5 V y compartir la tierra.
@@ -150,7 +154,7 @@ M,c1,c2,...,c10                                                       captura de
 # ...                                                                 respuestas y comentarios
 ```
 
-Los seis primeros campos de la línea `B` son los de la sección 10.7; se añaden `vcc_mV`, `G`, `banderas` (1 = VCC_A fuera de rango, se usa 3.7 V; 2 = I saturada; 4 = Q saturada; 8 = VCC_A ≥ VDD; 16 = sin lectura del FVR; 32 = se descartaron tramas: la cola estaba llena) y `etapas` (1 = cero, 2 = θ, 4 = ganancia, 8 = normalización, 16 = autocero; 31 = todas activas). La configuración se informa con líneas `# G=2 cero=ON theta=ON ganancia=ON norm=ON autocero=ON I0_uV=… Q0_uV=… theta_cdeg=…`.
+Los seis primeros campos de la línea `B` son los de la sección 10.7; se añaden `vcc_mV`, `G`, `banderas` (1 = VCC_A fuera de rango, se usa 3.7 V; 2 = I saturada; 4 = Q saturada; 8 = VCC_A ≥ VDD; 16 = sin lectura del FVR; 32 = se descartaron tramas: la cola estaba llena; 64 = el reloj externo de 4 MHz no está y se usa el HFINTOSC de reserva) y `etapas` (1 = cero, 2 = θ, 4 = ganancia, 8 = normalización, 16 = autocero; 31 = todas activas). La configuración se informa con líneas `# G=2 cero=ON theta=ON ganancia=ON norm=ON autocero=ON I0_uV=… Q0_uV=… theta_cdeg=…`.
 
 La orden `m` copia 200 conversiones seguidas de I_OUT, las mismas de las rondas (una por ms: 200 ms a 1 kS/s), y las envía como 20 líneas `M,…` entre `# m: captura de 200 conversiones de I_OUT, una cada 1000 us` y `# fin captura`. Las tramas y las muestras siguen sin hueco durante la captura. La traza del PIC se vacía y no crece mientras dura, porque la captura usa su memoria.
 
@@ -201,7 +205,9 @@ El otro método, con un osciloscopio en RA1, y los detalles están en [`docs/ana
 | `GANANCIA_ACTIVA` | 1 | división por G activa al arrancar |
 | `NORMALIZACION_ACTIVA` | 1 | normalización a VCC_A activa al arrancar |
 | `AUTOCERO_ACTIVO` | 1 | resta del offset del ADC medido en AVSS activa al arrancar |
-| `SALIDA_DISPARO` | 1 | saca el PWM6 (instante de cada conversión) por RA1 en las compilaciones de producción |
+| `RELOJ` | 0 | 0 = oscilador interno (32 MHz); 1 = cristal de 4 MHz en RA5/RA4; 2 = oscilador de cuarzo de 4 MHz en RA5. Con 1 y 2, FOSC = 16 MHz (PLL ×4) ([`docs/reloj_externo_4MHz.md`](docs/reloj_externo_4MHz.md)) |
+| `CRISTAL_XT` | 0 | modo del cristal: 0 = HS, 1 = XT |
+| `SALIDA_DISPARO` | 1 (0 con el cristal) | saca el PWM6 (instante de cada conversión) por RA1 en las compilaciones de producción |
 | `USAR_FVR` | 1 | mide el FVR para conocer VCC_A en voltios (protección de 2.5 V) |
 | `DIVISOR_VCCA` | 1 | 2 si se monta un divisor 1:2 en la entrada de VCC_A |
 | `N_TRAZA` | 64 | puntos de la traza en el PIC (0 = sin traza; 512 B de RAM con 64) |
@@ -212,8 +218,8 @@ También se pueden definir en *Project Properties > XC8 Compiler > Preprocessing
 ## Recursos y tiempos (estimación)
 
 - **RAM:** unos 1000 de 2048 bytes (traza 512 B, que comparte memoria con la captura `m`; buffer de transmisión 128 B; cola de tramas 64 B; el resto estado y pila compilada).
-- **ADC:** cada disparo son 8 µs de adquisición + ~14.3 µs de conversión; la interrupción ocupa del orden del 10 % de la CPU.
-- **Tiempo por trama de 10 ms:** ~2–3 ms de cálculo y formato en coma flotante por software; el cierre de bloque añade `sqrtf` y `atan2f`, y "Calibrar θ" además `sinf` y `cosf`. El muestreo no depende de `main()`: si el lazo se retrasa, las tramas esperan en la cola (hasta 4, 40 ms); solo si va más atrasado se descartan, lo que el PC muestra como aviso y la orden `?` como "muestras perdidas".
+- **ADC:** cada disparo son 8 µs de adquisición + ~14.3 µs de conversión; la interrupción ocupa del orden del 10 % de la CPU (el doble con el reloj externo de 4 MHz, a 16 MHz).
+- **Tiempo por trama de 10 ms:** ~2–3 ms (~4–6 ms a 16 MHz, con el reloj externo) de cálculo y formato en coma flotante por software; el cierre de bloque añade `sqrtf` y `atan2f`, y "Calibrar θ" además `sinf` y `cosf`. El muestreo no depende de `main()`: si el lazo se retrasa, las tramas esperan en la cola (hasta 4, 40 ms); solo si va más atrasado se descartan, lo que el PC muestra como aviso y la orden `?` como "muestras perdidas".
 - **UART:** ~45 caracteres por muestra y ~65 por bloque: la mitad de los 115200 baudios.
 
 ## Decisiones abiertas de la sección 12
@@ -236,6 +242,7 @@ cd tests
 make          # todo
 make test     # procesamiento con los vectores de la sección 9.1 (gcc)
 make sim      # firmware completo con hardware simulado y comprobación de su salida
+make reloj    # opción de reloj externo de 4 MHz: registros de cada modo y firmware simulado
 make adc1k    # avance ADC 1 kS/s: firmware simulado y comprobación de lo que envía
 make pc       # programas del PC: intérprete de líneas, CSV, análisis del jitter, adc_1ksps y prueba_usb6211 (numpy)
 ```

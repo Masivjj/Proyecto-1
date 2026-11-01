@@ -36,6 +36,8 @@ Si vuelves a generar con MCC, los archivos de `mcc_generated_files/` se sustituy
 | Resultado | Current System clock: 32 MHz (8 MIPS) |
 | Low-voltage programming enable | ✔ |
 
+Esto es con el reloj interno (`RELOJ = 0`, configuración `default`). Con el **reloj externo de 4 MHz** (`RELOJ = 1` o `2`) cambian FEXTOSC (HS, XT o ECM), OSCFRQ (16 MHz), T2CON, ADCLK, SP1BRGL y el puerto A. Los archivos de `mcc_generated_files/` ya tienen los dos juegos de valores con `#if RELOJ`; si se regenera con MCC, se pierden. La tabla de valores está en [`reloj_externo_4MHz.md`](reloj_externo_4MHz.md), sección 5.
+
 **Registers / Configuration Bits** (los demás, por defecto)
 
 | Palabra | Ajustes |

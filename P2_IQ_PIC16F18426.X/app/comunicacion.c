@@ -12,6 +12,7 @@
 #include "adquisicion.h"
 #include "ajustes.h"
 #include "formato.h"
+#include "reloj.h"
 #include "traza.h"
 
 #define UV_POR_MV       1000.0f     /* mV -> uV                      */
@@ -19,7 +20,7 @@
 #define CENTESIMAS      100.0f      /* grados -> centesimas de grado */
 #define MILESIMAS       1000.0f     /* d (x1e-4) -> milesimas        */
 
-#define ESTADO_LINEAS   9u
+#define ESTADO_LINEAS   10u
 #define CODIGOS_POR_LINEA 10u       /* captura: codigos en cada linea M,...   */
 
 static uint8_t estado_paso;         /* proxima linea del estado (0 = ninguna) */
@@ -114,6 +115,32 @@ static void tx_configuracion(void)
     tx_fin();
 }
 
+/* "# reloj: ..." con la fuente del reloj en uso (reloj.c) */
+#if RELOJ == RELOJ_CRISTAL_4MHZ
+#define TEXTO_EXTERNO   "cristal de 4 MHz (RA5/RA4)"
+#else
+#define TEXTO_EXTERNO   "oscilador de 4 MHz (RA5)"
+#endif
+static void tx_reloj(void)
+{
+    switch (reloj_estado()) {
+    case RELOJ_EST_EXTERNO:
+        tx_texto("# reloj: " TEXTO_EXTERNO " x PLL 4 = 16 MHz\r\n");
+        break;
+    case RELOJ_EST_RESERVA:
+        tx_texto("# reloj: FALLO del " TEXTO_EXTERNO ": HFINTOSC de reserva a 16 MHz (+-2 %)\r\n");
+        break;
+    default:
+        tx_texto("# reloj: interno (HFINTOSC) a 32 MHz\r\n");
+        break;
+    }
+}
+
+void com_aviso_reloj(void)
+{
+    tx_texto("# reloj: el " TEXTO_EXTERNO " se ha parado; sigue el HFINTOSC a 16 MHz (+-2 %)\r\n");
+}
+
 /* Lineas del mensaje de estado y ayuda (paso = 1 .. ESTADO_LINEAS) */
 static void tx_linea_estado(uint8_t paso, uint32_t muestras_perdidas)
 {
@@ -131,9 +158,12 @@ static void tx_linea_estado(uint8_t paso, uint32_t muestras_perdidas)
         tx_texto(" por trama\r\n");
         break;
     case 3u:
-        tx_configuracion();
+        tx_reloj();
         break;
     case 4u:
+        tx_configuracion();
+        break;
+    case 5u:
         tx_texto("# puntos en traza: ");
         tx_u32(traza_puntos());
         tx_texto("  muestras perdidas: ");
@@ -143,16 +173,16 @@ static void tx_linea_estado(uint8_t paso, uint32_t muestras_perdidas)
         tx_texto(" LSB");
         tx_fin();
         break;
-    case 5u:
+    case 6u:
         tx_texto("# muestra: t_ms,Ip_uV,Qp_uV,I1_uV,Q1_uV\r\n");
         break;
-    case 6u:
+    case 7u:
         tx_texto("# bloque:  B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas\r\n");
         break;
-    case 7u:
+    case 8u:
         tx_texto("# ordenes: z=fijar cero x=borrar cero c=calibrar theta t=theta 0 b=borrar traza\r\n");
         break;
-    case 8u:
+    case 9u:
         tx_texto("#          2/1/0=ganancia x2/x11/x101 p=volcar traza m=captura (jitter) ?=estado\r\n");
         break;
     default:

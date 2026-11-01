@@ -14,6 +14,7 @@
   Section: Included Files
 */
 #include "eusart1.h"
+#include "device_config.h"    /* opcion RELOJ: SP1BRG */
 
 /**
   Section: Macro Declarations
@@ -69,8 +70,13 @@ void EUSART1_Initialize(void)
     // TX9 8-bit; TX9D 0; SENDB sync_break_complete; TXEN enabled; SYNC asynchronous; BRGH hi_speed; CSRC slave;
     TX1STA = 0x24;
 
-    // SP1BRGL 68;
+#if RELOJ_EXTERNO
+    // SP1BRGL 34;  (16 MHz: 16e6 / (4 * 35) = 114286 baudios, -0.8 %)
+    SP1BRGL = 0x22;
+#else
+    // SP1BRGL 68;  (32 MHz: 32e6 / (4 * 69) = 115942 baudios, +0.6 %)
     SP1BRGL = 0x44;
+#endif
 
     // SP1BRGH 0;
     SP1BRGH = 0x00;

@@ -17,8 +17,13 @@
  *     en t = 3 s se para 30 ms (la cola de tramas lo absorbe) y en t = 6.5 s,
  *     150 ms (la cola se llena y se pierden tramas)
  *   - pulsadores: una pulsacion de 150 ms y un rebote de 20 ms
+ *   - oscilador (solo con RELOJ externo, app/reloj.c): el reloj de 4 MHz
+ *     arranca a las 20 lecturas de COSC ("bien"), no arranca nunca
+ *     ("ausente") o arranca y se para en t = 0.7 s ("falla": el FSCM pasa
+ *     al HFINTOSC y activa OSFIF; el firmware debe fijar el HFINTOSC)
  *
- * Uso: sim <segundos> <archivo_eeprom>     (ver tests/Makefile, "make sim")
+ * Uso: sim <segundos> <archivo_eeprom> [bien|ausente|falla]
+ *      (ver tests/Makefile, "make sim" y "make reloj")
  */
 #include <math.h>
 #include <stdio.h>
@@ -45,6 +50,7 @@ uint8_t ADPCH, ADACT, RA1PPS;
 sim_intcon_t INTCONbits;
 volatile sim_nvmcon1_t NVMCON1bits;
 uint8_t NVMADRH, NVMADRL, NVMDATL, NVMCON2;
+uint8_t OSCCON1 = 0x60;                 /* HFINTOSC (OSCILLATOR_Initialize) */
 int sim_led;
 
 /* ---- Tarjeta P2 simulada ---- */
@@ -84,6 +90,25 @@ static int rx_n, rx_i;
 static unsigned semilla = 12345u;
 static long ultima_conversion[0x40];    /* disparo + 1 de la ultima conversion de cada canal */
 static long conversiones_i;             /* conversiones de I_OUT                              */
+
+/* ---- Oscilador ---- */
+enum { RELOJ_BIEN, RELOJ_AUSENTE, RELOJ_FALLA };
+static int escenario_reloj = RELOJ_BIEN;
+static sim_osccon2_t osccon2 = {6};     /* COSC = 110: HFINTOSC          */
+static int lecturas_cosc, reloj_caido;
+static long disparo_caida;
+
+sim_osccon2_t *sim_osccon2(void)
+{
+    if (OSCCON1 == 0x20 && escenario_reloj != RELOJ_AUSENTE && !reloj_caido) {
+        if (++lecturas_cosc >= 20) {    /* OST y enganche del PLL */
+            osccon2.COSC = 2;           /* EXTOSC con PLL x4      */
+        }
+    } else if (OSCCON1 == 0x60) {
+        osccon2.COSC = 6;
+    }
+    return &osccon2;
+}
 
 static double ruido(void)
 {
@@ -226,6 +251,16 @@ static void un_disparo(void)
         conversiones_i++;
     }
     resultado_adc = convertir(v);
+    /* El reloj externo se para: el FSCM pasa al HFINTOSC y avisa con OSFIF */
+    if (escenario_reloj == RELOJ_FALLA && !reloj_caido && osccon2.COSC == 2 && t >= 0.7) {
+        reloj_caido = 1;
+        disparo_caida = n_disparo;
+        osccon2.COSC = 6;
+        PIR1bits.OSFIF = 1;
+    }
+    if (reloj_caido && OSCCON1 != 0x60 && n_disparo - disparo_caida > 200) {
+        fallo("el firmware no fija el HFINTOSC 20 ms despues del fallo del reloj");
+    }
     PIR1bits.ADIF = 0;                      /* lo hace ADCC_ISR() */
     manejador_adc();
     n_disparo++;
@@ -267,6 +302,20 @@ void sim_gie(int habilitar)
         }
         fprintf(stderr, "sim: %ld conversiones de I_OUT en %.1f s, todas a 1 ms de la anterior\n",
                 conversiones_i, n_disparo * (PERIODO_DISPARO_US / 1e6));
+#if RELOJ_EXTERNO
+        if (escenario_reloj == RELOJ_BIEN && !(OSCCON1 == 0x20 && osccon2.COSC == 2)) {
+            fallo("con el reloj externo bien, el PIC no funciona con el externo");
+        }
+        if (escenario_reloj != RELOJ_BIEN && !(OSCCON1 == 0x60 && osccon2.COSC == 6)) {
+            fallo("sin reloj externo, el PIC no queda con el HFINTOSC");
+        }
+        fprintf(stderr, "sim: reloj %s, COSC = %u\n", escenario_reloj == RELOJ_BIEN ? "bien"
+                : escenario_reloj == RELOJ_AUSENTE ? "ausente" : "falla", (unsigned)osccon2.COSC);
+#else
+        if (OSCCON1 != 0x60) {
+            fallo("con reloj interno no se debe tocar OSCCON1");
+        }
+#endif
         f = fopen(archivo_eeprom, "wb");
         if (f != NULL) {
             fwrite(eeprom, 1, sizeof eeprom, f);
@@ -294,9 +343,13 @@ int main(int argc, char **argv)
 {
     FILE *f;
 
-    if (argc != 3) {
-        fprintf(stderr, "uso: %s <segundos> <archivo_eeprom>\n", argv[0]);
+    if (argc != 3 && argc != 4) {
+        fprintf(stderr, "uso: %s <segundos> <archivo_eeprom> [bien|ausente|falla]\n", argv[0]);
         return 1;
+    }
+    if (argc == 4) {
+        escenario_reloj = strcmp(argv[3], "ausente") == 0 ? RELOJ_AUSENTE
+                        : strcmp(argv[3], "falla") == 0 ? RELOJ_FALLA : RELOJ_BIEN;
     }
     max_disparos = (long)(atof(argv[1]) * 1e6 / PERIODO_DISPARO_US);
     archivo_eeprom = argv[2];

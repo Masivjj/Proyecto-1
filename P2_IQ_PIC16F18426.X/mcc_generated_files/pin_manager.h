@@ -22,6 +22,18 @@
       12   RA1     -              ICSPCLK (sin uso: entrada analogica)
        4   RA3     -              MCLR (pull-up externo de 10 kohm)
 
+    Con reloj externo (opcion RELOJ de app/app_config.h, docs/reloj_externo_4MHz.md):
+
+      Pin  Puerto  RELOJ_CRISTAL_4MHZ                 RELOJ_OSCILADOR_4MHZ
+       2   RA5     OSC1: cristal de 4 MHz             CLKIN: salida del oscilador de 4 MHz
+       3   RA4     OSC2: cristal de 4 MHz             BTN_THETA (igual que con reloj interno)
+      13   RA0     LED                                LED
+      12   RA1     BTN_THETA (SALIDA_DISPARO = 0)     disparo del PWM6 (SALIDA_DISPARO = 1)
+
+    En las compilaciones de depuracion (__DEBUG) RA0 y RA1 son del
+    depurador: con reloj externo no hay LED y, con cristal, tampoco pulsador
+    "Calibrar theta" (queda la orden 'c').
+
     Equivalente a lo que genera MCC Classic con docs/configuracion_MCC_Classic.md.
 */
 
@@ -33,6 +45,7 @@
 */
 
 #include <xc.h>
+#include "device_config.h"    /* opcion RELOJ: pines del oscilador, LED y pulsador */
 
 #define INPUT   1
 #define OUTPUT  0
@@ -42,6 +55,29 @@
 
 #define ANALOG      1
 #define DIGITAL     0
+
+/* Puerto A segun el reloj (los usa PIN_MANAGER_Initialize) */
+#if RELOJ == RELOJ_INTERNO
+#define LED_EN_RA0          0
+#define BTN_THETA_EN_RA4    1
+#define BTN_THETA_EN_RA1    0
+#define PINES_TRISA         0x1F    /* RA5 (LED) salida                          */
+#define PINES_ANSELA        0x03    /* RA0, RA1 analogicos (sin uso)             */
+#define PINES_WPUA          0x14    /* pull-up en RA2 y RA4 (pulsadores)         */
+#else
+#ifdef __DEBUG
+#define LED_EN_RA0          0       /* RA0 = ICSPDAT, del depurador              */
+#define BTN_THETA_EN_RA1    0       /* RA1 = ICSPCLK, del depurador              */
+#else
+#define LED_EN_RA0          1
+#define BTN_THETA_EN_RA1    BOTON_THETA_EN_RA1
+#endif
+#define BTN_THETA_EN_RA4    (RELOJ == RELOJ_OSCILADOR_4MHZ)
+/* RA5 (OSC1/CLKIN) y, con cristal, RA4 (OSC2): entradas digitales sin pull-up */
+#define PINES_TRISA         (LED_EN_RA0 ? 0x3E : 0x3F)
+#define PINES_ANSELA        ((LED_EN_RA0 ? 0x00 : 0x01) | (BTN_THETA_EN_RA1 ? 0x00 : 0x02))
+#define PINES_WPUA          (0x04 | (BTN_THETA_EN_RA4 ? 0x10 : 0x00) | (BTN_THETA_EN_RA1 ? 0x02 : 0x00))
+#endif
 
 #define PULL_UP_ENABLED      1
 #define PULL_UP_DISABLED     0
@@ -66,6 +102,7 @@
 #define BTN_CERO_SetAnalogMode()      do { ANSELAbits.ANSA2 = 1; } while(0)
 #define BTN_CERO_SetDigitalMode()     do { ANSELAbits.ANSA2 = 0; } while(0)
 
+#if BTN_THETA_EN_RA4
 // get/set BTN_THETA aliases
 #define BTN_THETA_TRIS                 TRISAbits.TRISA4
 #define BTN_THETA_LAT                  LATAbits.LATA4
@@ -85,7 +122,15 @@
 #define BTN_THETA_SetOpenDrain()       do { ODCONAbits.ODCA4 = 1; } while(0)
 #define BTN_THETA_SetAnalogMode()      do { ANSELAbits.ANSA4 = 1; } while(0)
 #define BTN_THETA_SetDigitalMode()     do { ANSELAbits.ANSA4 = 0; } while(0)
+#elif BTN_THETA_EN_RA1
+// BTN_THETA en RA1 (cristal en RA4/RA5)
+#define BTN_THETA_GetValue()           PORTAbits.RA1
+#else
+// sin pulsador "Calibrar theta" (nunca pulsado): queda la orden 'c'
+#define BTN_THETA_GetValue()           1
+#endif
 
+#if RELOJ == RELOJ_INTERNO
 // get/set LED aliases
 #define LED_TRIS                 TRISAbits.TRISA5
 #define LED_LAT                  LATAbits.LATA5
@@ -105,6 +150,19 @@
 #define LED_SetOpenDrain()       do { ODCONAbits.ODCA5 = 1; } while(0)
 #define LED_SetAnalogMode()      do { ANSELAbits.ANSA5 = 1; } while(0)
 #define LED_SetDigitalMode()     do { ANSELAbits.ANSA5 = 0; } while(0)
+#elif LED_EN_RA0
+// LED en RA0 (el reloj externo ocupa RA5)
+#define LED_SetHigh()            do { LATAbits.LATA0 = 1; } while(0)
+#define LED_SetLow()             do { LATAbits.LATA0 = 0; } while(0)
+#define LED_Toggle()             do { LATAbits.LATA0 = ~LATAbits.LATA0; } while(0)
+#define LED_GetValue()           PORTAbits.RA0
+#else
+// sin LED (depuracion con reloj externo: RA0 es del depurador)
+#define LED_SetHigh()            do { } while(0)
+#define LED_SetLow()             do { } while(0)
+#define LED_Toggle()             do { } while(0)
+#define LED_GetValue()           0
+#endif
 
 // get/set I_OUT aliases
 #define I_OUT_TRIS                 TRISCbits.TRISC0
