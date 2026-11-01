@@ -79,6 +79,7 @@ La configuración de los periféricos está documentada paso a paso en [`docs/co
 ## Conexiones
 
 Esquema completo con lista de componentes, para los tres modos de reloj: [`docs/esquema_conexiones.html`](docs/esquema_conexiones.html) (abrir en el navegador).
+Para grabar el firmware con un PICkit 3/4/5 o un MPLAB Snap en una tarjeta aparte con zócalo: [`docs/tarjeta_programacion.html`](docs/tarjeta_programacion.html).
 
 | PIC16F18426 (14 pines) | Señal | Conexión |
 |---|---|---|

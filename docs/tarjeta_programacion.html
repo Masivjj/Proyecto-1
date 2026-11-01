@@ -1,0 +1,390 @@
+<title>Tarjeta de programación PIC16F18426</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Misma hoja de plano que el esquema de conexiones: papel frío, tinta pizarra; el cobre marca lo que depende del programador */
+:root {
+  --bg: #f2f4f3; --paper: #fbfcfc; --ink: #1b2422; --muted: #5b6764; --line: #cfd6d3;
+  --wire: #1f5a85; --acc: #b5651d; --acc-soft: #f5e6d6; --warn: #9b2c2c; --warn-soft: #f6e3e3;
+  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111615; --paper: #171d1c; --ink: #dce4e1; --muted: #93a19d; --line: #2f3a37;
+    --wire: #79b6e3; --acc: #e5a25c; --acc-soft: #3a2a19; --warn: #f0a3a3; --warn-soft: #3b1f1f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111615; --paper: #171d1c; --ink: #dce4e1; --muted: #93a19d; --line: #2f3a37;
+  --wire: #79b6e3; --acc: #e5a25c; --acc-soft: #3a2a19; --warn: #f0a3a3; --warn-soft: #3b1f1f;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+main { max-width: 1160px; margin: 0 auto; display: grid; gap: 28px; }
+h1, h2 { text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 1.9rem; font-weight: 700; }
+h2 { font-size: 1.2rem; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header, section { display: grid; gap: 12px; }
+.modes { display: flex; flex-wrap: wrap; gap: 8px; }
+.modes button { font: 500 0.92rem var(--font-body); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+.modes button[aria-pressed="true"] { border-color: var(--acc); background: var(--acc-soft); box-shadow: inset 0 0 0 1px var(--acc); }
+.modes button:focus-visible { outline: 2px solid var(--wire); outline-offset: 2px; }
+.modeinfo { font-size: 0.92rem; color: var(--muted); max-width: 90ch; }
+.modeinfo b { color: var(--ink); font-weight: 600; }
+.sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; overflow-x: auto; }
+.sheet svg { display: block; width: 100%; min-width: 880px; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 22px; height: 0; border-top: 2px solid var(--wire); display: inline-block; }
+.sw.acc { border-color: var(--acc); }
+.sw.opt { border-top-style: dashed; border-color: var(--muted); }
+.w { stroke: var(--wire); stroke-width: 1.6; fill: none; }
+.s { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+.chg .w, .chg .s { stroke: var(--acc); }
+.chg .t { fill: var(--acc); }
+.opt { stroke-dasharray: 4 3; }
+.t { fill: var(--ink); font-family: var(--font-mono); font-size: 12px; }
+.tm { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.chip { fill: var(--paper); stroke: var(--ink); stroke-width: 2; }
+.dot { fill: var(--wire); }
+.chg .dot { fill: var(--acc); }
+.flag { fill: var(--paper); stroke: var(--wire); stroke-width: 1.4; }
+.chg .flag { stroke: var(--acc); }
+.fillink { fill: var(--ink); }
+.pinno { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.pinname { fill: var(--ink); font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.card h3 { margin: 0; font-size: 0.98rem; font-weight: 600; }
+.card ol, .card ul { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; font-size: 0.92rem; }
+.mono { font-family: var(--font-mono); font-size: 0.86em; }
+.tablewrap { overflow-x: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.ref { font-family: var(--font-mono); white-space: nowrap; }
+tr.changed td:first-child { box-shadow: inset 3px 0 0 var(--acc); }
+.chipopt { font-family: var(--font-mono); font-size: 0.72rem; border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; color: var(--muted); white-space: nowrap; }
+.warnbox { background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 4px; padding: 14px 16px; display: grid; gap: 8px; }
+.warnbox h3 { margin: 0; color: var(--warn); font-size: 1rem; }
+.warnbox ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 0.92rem; }
+.foot { font-size: 0.82rem; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .modes button { transition: background-color .15s, border-color .15s; } }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Detector de fisuras por corrientes de Eddy · grabación del firmware · PIC16F18426 DIP-14</div>
+    <h1>Tarjeta de programación del PIC16F18426</h1>
+    <p>Una placa pequeña con zócalo donde se pone el PIC, se graba el firmware con el programador por ICSP y se comprueba que arranca antes de llevarlo a la placa del detector. Elige tu programador:</p>
+    <div class="modes" role="group" aria-label="Programador">
+      <button type="button" id="p-pk3" data-prog="pickit3" aria-pressed="false">PICkit 3</button>
+      <button type="button" id="p-pk4" data-prog="pickit4" aria-pressed="true">PICkit 4</button>
+      <button type="button" id="p-pk5" data-prog="pickit5" aria-pressed="false">PICkit 5</button>
+      <button type="button" id="p-snap" data-prog="snap" aria-pressed="false">MPLAB Snap</button>
+    </div>
+    <div class="modeinfo" id="proginfo"></div>
+  </header>
+
+  <section aria-labelledby="h-esq">
+    <h2 id="h-esq">Esquema</h2>
+    <div class="sheet"><svg id="esquema" viewBox="0 0 1000 640" role="img" aria-label="Esquema de la tarjeta de programación"></svg></div>
+    <div class="legend">
+      <span><i class="sw"></i>conexión</span>
+      <span><i class="sw acc"></i>depende del programador</span>
+      <span><i class="sw opt"></i>opcional</span>
+      <span>Las etiquetas iguales (VDD, MCLR, ICSPDAT, ICSPCLK, GND) son el mismo nodo.</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-pasos">
+    <h2 id="h-pasos">Grabar el firmware</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>Pasos</h3>
+        <ol id="pasos"></ol>
+      </div>
+      <div class="card">
+        <h3>J1 · conector del programador</h3>
+        <ol class="mono">
+          <li>VPP/MCLR → pin 4 del PIC (flecha ▲ del programador)</li>
+          <li>VDD → pin 1</li>
+          <li>GND → pin 14</li>
+          <li>ICSPDAT (PGD) → pin 13 (RA0)</li>
+          <li>ICSPCLK (PGC) → pin 12 (RA1)</li>
+          <li>sin conectar (PGM/LVP antiguo)</li>
+        </ol>
+        <p style="font-size:.88rem" id="j1nota"></p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-bom">
+    <h2 id="h-bom">Lista de componentes</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Ref.</th><th>Componente</th><th>Valor / tipo</th><th>Cant.</th><th>Por qué</th></tr></thead>
+        <tbody id="bom"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-encircuito">
+    <h2 id="h-encircuito">Programar sin sacar el PIC de la placa del detector</h2>
+    <div class="card">
+      <p style="font-size:.92rem">También se puede grabar en la placa del detector por su J1, con los mismos 6 pines. Allí RA0 y RA1 tienen otros usos según el modo de reloj del firmware, y la hoja de datos pide que ICSPDAT e ICSPCLK no tengan cargas al programar:</p>
+      <ul>
+        <li><b>Reloj interno:</b> RA0 libre y RA1 solo saca el disparo del ADC cuando el programa corre. Se programa sin cambios.</li>
+        <li><b>Cristal u oscilador de 4 MHz:</b> el LED está en RA0 (y, con el cristal, el pulsador “Calibrar θ” en RA1). Pon un puente (JP2) en serie con el LED y quítalo para programar, y no toques el pulsador mientras se graba.</li>
+        <li><b>Alimentación:</b> si la tarjeta P2 alimenta el PIC, el programador <b>no</b> debe dar tensión. Elige “alimentación externa” en MPLAB X.</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="warnbox">
+    <h3>Cuidado</h3>
+    <ul>
+      <li><b>Orientación:</b> la muesca del PIC hacia el lado del pin 1 del zócalo, y la flecha del programador en el pin 1 de J1 (MCLR). Al revés, VDD y GND quedan cruzados.</li>
+      <li><b>Una sola fuente:</b> o alimenta el programador, o la fuente externa por J4 con JP1 puesto, nunca las dos.</li>
+      <li><b>Nada en ICSPDAT ni ICSPCLK</b> salvo, si quieres, 47 Ω en serie contra descargas: ni LED, ni pull-up, ni condensadores (hoja de datos, 2.4).</li>
+      <li><b>MCLR sube a 8–9 V</b> en la programación de alta tensión (VIHH): no conectes nada más a ese pin que R1 y J1.</li>
+      <li id="warn-prog"></li>
+    </ul>
+  </div>
+
+  <p class="foot">Conector y conexiones según la hoja de datos DS40001985C: figura 38-2 (conector de 6 pines del PICkit), sección 2 (100 nF junto a VDD, MCLR con 10 kΩ), 2.4 (líneas ICSP sin cargas, serie ≤ 100 Ω), 38.1–38.2 (programación en alta y baja tensión). El firmware se graba con MPLAB X desde <span class="mono">P2_IQ_PIC16F18426.X</span>; el conexionado completo del detector está en <span class="mono">docs/esquema_conexiones.html</span>.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var PROG = {
+    pickit3: { nombre: "PICkit 3", ext: false,
+      info: "<b>PICkit 3:</b> conector de 6 pines, el mismo orden que J1. Puede alimentar la tarjeta (el PIC solo gasta unos pocos mA) y programa en alta o baja tensión.",
+      j1: "El conector de 6 pines del PICkit 3 entra directo en J1.",
+      power: "En <i>Project Properties › PICkit 3 › Power</i>, marca <i>Power target circuit from PICkit 3</i> y elige 3.3 V. JP1 quitado.",
+      warn: "<b>PICkit 3 en MPLAB X:</b> si es una versión de MPLAB X que ya no lo incluye, usa la última que lo soporte o el programador PICkit 4/5." },
+    pickit4: { nombre: "PICkit 4", ext: false,
+      info: "<b>PICkit 4:</b> conector de 8 pines; los 6 primeros coinciden con J1 (pines 7 y 8 sin usar). Puede alimentar la tarjeta y programa en alta o baja tensión.",
+      j1: "El conector de 8 pines del PICkit 4 se enchufa en J1 alineando el pin 1 (flecha); los pines 7 y 8 quedan al aire.",
+      power: "En <i>Project Properties › PICkit 4 › Power</i>, marca <i>Power target circuit from PICkit 4</i> y elige 3.3 V. JP1 quitado.",
+      warn: "<b>Pines 7 y 8 del PICkit 4</b> sin conectar: no los lleves a ningún pin del PIC." },
+    pickit5: { nombre: "PICkit 5", ext: false,
+      info: "<b>PICkit 5:</b> conector de 8 pines; los 6 primeros coinciden con J1 (pines 7 y 8 sin usar). Puede alimentar la tarjeta y programa en alta o baja tensión.",
+      j1: "El conector de 8 pines del PICkit 5 se enchufa en J1 alineando el pin 1 (flecha); los pines 7 y 8 quedan al aire.",
+      power: "En <i>Project Properties › PICkit 5 › Power</i>, marca <i>Power target circuit from PICkit 5</i> y elige 3.3 V. JP1 quitado.",
+      warn: "<b>Pines 7 y 8 del PICkit 5</b> sin conectar: no los lleves a ningún pin del PIC." },
+    snap: { nombre: "MPLAB Snap", ext: true,
+      info: "<b>MPLAB Snap:</b> conector de 8 pines; los 6 primeros coinciden con J1. <b>No alimenta la tarjeta</b> y programa en baja tensión (LVP): necesita la fuente externa en J4 con JP1 puesto. El firmware deja LVP activado, así que basta.",
+      j1: "El Snap lee la tensión de la tarjeta por el pin 2 (VDD): tiene que estar conectado aunque no la alimente.",
+      power: "Fuente de 3.3 V (3.0–5.0 V) en J4 y JP1 puesto. En <i>Project Properties › Snap › Program Options</i>, marca la programación en baja tensión (<i>Low Voltage Programming</i>).",
+      warn: "<b>No quites el LVP</b> en los bits de configuración (<span class='mono'>LVP = ON</span> en device_config.c): sin él, el Snap ya no puede volver a grabar el PIC y haría falta un PICkit." }
+  };
+
+  var NS = "http://www.w3.org/2000/svg", svg = document.getElementById("esquema");
+  var CHIP = { x1: 560, x2: 740, y1: 78, y2: 586 };
+  function rowY(i) { return 110 + i * 74; }
+  function el(name, attrs, parent, text) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    (parent || svg).appendChild(e);
+    return e;
+  }
+  function line(g, x1, y1, x2, y2, cls) { return el("line", { x1: x1, y1: y1, x2: x2, y2: y2, "class": cls || "w" }, g); }
+  function txt(g, x, y, s, anchor, cls) { return el("text", { x: x, y: y, "text-anchor": anchor || "middle", "class": cls || "t" }, g, s); }
+  function ground(g, x, y) {
+    line(g, x, y, x, y + 12, "s"); line(g, x - 10, y + 12, x + 10, y + 12, "s");
+    line(g, x - 6, y + 16, x + 6, y + 16, "s"); line(g, x - 2, y + 20, x + 2, y + 20, "s");
+  }
+  function drawChain(g, x0, y, d, items) {
+    var x = x0;
+    items.forEach(function (it) {
+      var opt = it.opt ? " opt" : "";
+      if (it.t === "w") { line(g, x, y, x + d * it.len, y, "w" + opt); x += d * it.len; }
+      else if (it.t === "R") {
+        var a = x + d * 10, b = x + d * 46, pts = [];
+        line(g, x, y, a, y, "w" + opt);
+        for (var k = 0; k <= 6; k++) pts.push((a + d * k * 6) + "," + (y + (k === 0 || k === 6 ? 0 : (k % 2 ? -6 : 6))));
+        el("polyline", { points: pts.join(" "), "class": "s" + opt }, g);
+        line(g, b, y, x + d * 56, y, "w" + opt);
+        txt(g, x + d * 28, y - 12, it.ref + " " + it.val, "middle", it.opt ? "tm" : "t");
+        x += d * 56;
+      } else if (it.t === "C") {
+        el("circle", { cx: x, cy: y, r: 2.6, "class": "dot" }, g);
+        line(g, x, y, x, y + 10, "w" + opt);
+        line(g, x - 10, y + 10, x + 10, y + 10, "s" + opt); line(g, x - 10, y + 16, x + 10, y + 16, "s" + opt);
+        line(g, x, y + 16, x, y + 24, "w" + opt); ground(g, x, y + 24);
+        txt(g, x + 14, y + 34, it.ref + " " + it.val, "start", it.opt ? "tm" : "t");
+        line(g, x, y, x + d * 26, y, "w"); x += d * 26;
+      } else if (it.t === "LED") {
+        var c = x + d * 25;
+        line(g, x, y, c - d * 8, y, "w" + opt);
+        el("polygon", { points: (c - d * 8) + "," + (y - 8) + " " + (c - d * 8) + "," + (y + 8) + " " + (c + d * 6) + "," + y, "class": "s" + opt }, g);
+        line(g, c + d * 6, y - 8, c + d * 6, y + 8, "s" + opt); line(g, c + d * 6, y, x + d * 44, y, "w" + opt);
+        line(g, c - 2, y - 11, c + 4, y - 17, "s"); line(g, c + 3, y - 10, c + 9, y - 16, "s");
+        txt(g, c, y - 22, it.ref + " LED", "middle", it.opt ? "tm" : "t"); x += d * 44;
+      } else if (it.t === "JP") {
+        var j1 = x + d * 12, j2 = x + d * 32;
+        line(g, x, y, j1, y, "w" + opt);
+        el("circle", { cx: j1, cy: y, r: 3.2, "class": "flag" }, g); el("circle", { cx: j2, cy: y, r: 3.2, "class": "flag" }, g);
+        el("rect", { x: Math.min(j1, j2) - 6, y: y - 7, width: 32, height: 14, rx: 3, "class": "s opt" }, g);
+        txt(g, (j1 + j2) / 2, y - 14, it.ref, "middle", it.opt ? "tm" : "t");
+        line(g, j2, y, x + d * 44, y, "w" + opt); x += d * 44;
+      } else if (it.t === "G") { ground(g, x, y); }
+      else if (it.t === "N") {
+        var wN = it.name.length * 7.3 + 18, h = 18, xs = d > 0 ? x : x - wN;
+        var p2 = d > 0 ? [x, y, x + 8, y - h / 2, x + wN, y - h / 2, x + wN, y + h / 2, x + 8, y + h / 2]
+                       : [x, y, x - 8, y - h / 2, x - wN, y - h / 2, x - wN, y + h / 2, x - 8, y + h / 2];
+        el("polygon", { points: p2.join(" "), "class": "flag" }, g);
+        txt(g, xs + wN / 2 + d * 4, y + 4, it.name); x += d * wN;
+      } else if (it.t === "TAP") {
+        el("circle", { cx: x + d * 14, cy: y, r: 2.6, "class": "dot" }, g);
+        line(g, x, y, x + d * 28, y); line(g, x + d * 14, y, x + d * 14, y + 20);
+        var wT = it.name.length * 7.3 + 14;
+        el("rect", { x: x + d * 14 - wT / 2, y: y + 20, width: wT, height: 18, rx: 2, "class": "flag" }, g);
+        txt(g, x + d * 14, y + 33, it.name); x += d * 28;
+      } else if (it.t === "FREE") { txt(g, x + d * 6, y + 4, it.name, d > 0 ? "start" : "end", "tm"); }
+    });
+  }
+
+  function connector(g, x, yTop, pins, title, cls) {
+    var h = pins.length * 50 + 10;
+    el("rect", { x: x, y: yTop, width: 70, height: h, rx: 3, "class": "chip" }, g);
+    txt(g, x + 35, yTop - 10, title, "middle", "pinname");
+    pins.forEach(function (p, i) {
+      var y = yTop + 30 + i * 50, gg = el("g", { "class": p.chg ? "chg" : "" }, g);
+      txt(gg, x + 10, y + 4, String(p.n), "start", "pinno");
+      txt(gg, x + 64, y + 4, p.lbl, "end", "pinname");
+      if (p.items) drawChain(gg, x + 70, y, 1, p.items);
+    });
+  }
+
+  function draw(progKey) {
+    var ext = PROG[progKey].ext;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    /* J1: programador */
+    var g1 = el("g", {});
+    connector(g1, 40, 92, [
+      { n: 1, lbl: "VPP", items: [{ t: "w", len: 30 }, { t: "N", name: "MCLR" }] },
+      { n: 2, lbl: "VDD", items: [{ t: "w", len: 30 }, { t: "N", name: "VDD" }] },
+      { n: 3, lbl: "GND", items: [{ t: "w", len: 30 }, { t: "G" }] },
+      { n: 4, lbl: "PGD", items: [{ t: "R", ref: "R2", val: "47 Ω", opt: true }, { t: "w", len: 10 }, { t: "N", name: "ICSPDAT" }] },
+      { n: 5, lbl: "PGC", items: [{ t: "R", ref: "R3", val: "47 Ω", opt: true }, { t: "w", len: 10 }, { t: "N", name: "ICSPCLK" }] },
+      { n: 6, lbl: "NC", items: [{ t: "FREE", name: "sin conectar" }] }
+    ], "J1 " + PROG[progKey].nombre);
+    /* J4 + JP1: fuente externa */
+    var g4 = el("g", { "class": ext ? "chg" : "" });
+    connector(g4, 40, 470, [
+      { n: 1, lbl: "+", chg: ext, items: [{ t: "w", len: 16 }, { t: "JP", ref: ext ? "JP1 puesto" : "JP1 quitado", opt: !ext }, { t: "w", len: 16, opt: !ext }, { t: "N", name: "VDD" }] },
+      { n: 2, lbl: "−", items: [{ t: "w", len: 30 }, { t: "G" }] }
+    ], ext ? "J4 3.0–5.0 V" : "J4 (sin usar)");
+
+    /* U1 en zócalo */
+    el("rect", { x: CHIP.x1, y: CHIP.y1, width: CHIP.x2 - CHIP.x1, height: CHIP.y2 - CHIP.y1, rx: 4, "class": "chip" });
+    el("path", { d: "M " + (650 - 14) + " " + CHIP.y1 + " a 14 14 0 0 0 28 0", "class": "s" });
+    txt(null, 650, 368, "PIC16F18426", "middle", "pinname");
+    txt(null, 650, 384, "en zócalo DIP-14", "middle", "tm");
+    txt(null, 650, 612, "U1", "middle", "t");
+    var left = [
+      { n: 1, p: "VDD", items: [{ t: "w", len: 18 }, { t: "C", ref: "C1", val: "100 nF" }, { t: "w", len: 74 }, { t: "C", ref: "C2", val: "10 µF" }, { t: "w", len: 30 }, { t: "N", name: "VDD" }] },
+      { n: 2, p: "RA5", items: [{ t: "JP", ref: "JP3", opt: true }, { t: "R", ref: "R4", val: "1 kΩ", opt: true }, { t: "LED", ref: "D1", opt: true }, { t: "G" }] },
+      { n: 3, p: "RA4", items: [{ t: "FREE", name: "libre" }] },
+      { n: 4, p: "MCLR", items: [{ t: "TAP", name: "MCLR" }, { t: "R", ref: "R1", val: "10 kΩ" }, { t: "w", len: 10 }, { t: "N", name: "VDD" }] },
+      { n: 5, p: "RC5 RX", items: [{ t: "w", len: 14 }, { t: "R", ref: "R5", val: "1 kΩ", opt: true }, { t: "w", len: 8, opt: true }, { t: "N", name: "J2 TX" }] },
+      { n: 6, p: "RC4 TX", items: [{ t: "w", len: 14 }, { t: "R", ref: "R6", val: "1 kΩ", opt: true }, { t: "w", len: 8, opt: true }, { t: "N", name: "J2 RX" }] },
+      { n: 7, p: "RC3", items: [{ t: "FREE", name: "libre" }] }
+    ];
+    var right = [
+      { n: 14, p: "VSS", items: [{ t: "w", len: 30 }, { t: "G" }] },
+      { n: 13, p: "RA0", items: [{ t: "w", len: 30 }, { t: "N", name: "ICSPDAT" }, { t: "FREE", name: "  sin otras cargas" }] },
+      { n: 12, p: "RA1", items: [{ t: "w", len: 30 }, { t: "N", name: "ICSPCLK" }, { t: "FREE", name: "  sin otras cargas" }] },
+      { n: 11, p: "RA2", items: [{ t: "FREE", name: "libre" }] },
+      { n: 10, p: "RC0", items: [{ t: "FREE", name: "libre" }] },
+      { n: 9, p: "RC1", items: [{ t: "FREE", name: "libre" }] },
+      { n: 8, p: "RC2", items: [{ t: "FREE", name: "libre" }] }
+    ];
+    left.forEach(function (pin, i) {
+      var y = rowY(i), g = el("g", {});
+      line(g, CHIP.x1 - 30, y, CHIP.x1, y, "s");
+      txt(g, CHIP.x1 - 6, y - 5, String(pin.n), "end", "pinno");
+      txt(g, CHIP.x1 + 10, y + 4, pin.p, "start", "pinname");
+      drawChain(g, CHIP.x1 - 30, y, -1, pin.items);
+    });
+    right.forEach(function (pin, i) {
+      var y = rowY(i), g = el("g", {});
+      line(g, CHIP.x2, y, CHIP.x2 + 30, y, "s");
+      txt(g, CHIP.x2 + 6, y - 5, String(pin.n), "start", "pinno");
+      txt(g, CHIP.x2 - 10, y + 4, pin.p, "end", "pinname");
+      drawChain(g, CHIP.x2 + 30, y, 1, pin.items);
+    });
+  }
+
+  var BOM = [
+    ["U1", "Zócalo", "DIP-14 de tulipán (o ZIF)", 1, "Para poner y quitar el PIC sin doblar patas.", "todos"],
+    ["J1", "Tira de pines macho", "1 × 6, paso 2.54 mm", 1, "Conector ICSP (figura 38-2 de la hoja de datos).", "todos"],
+    ["C1", "Condensador cerámico", "100 nF X7R", 1, "Desacoplo junto a los pines 1 y 14.", "todos"],
+    ["C2", "Condensador", "10 µF, 16 V", 1, "Reserva de carga mientras se graba la Flash.", "todos"],
+    ["R1", "Resistencia", "10 kΩ ¼ W", 1, "Pull-up de MCLR; soporta los 8–9 V de VPP (0.5 mA).", "todos"],
+    ["R2, R3", "Resistencia", "47 Ω ¼ W", 2, "Opcional: en serie con PGD y PGC contra descargas (≤ 100 Ω, sección 2.4).", "todos", true],
+    ["JP3, R4, D1", "Puente, resistencia y LED", "tira de 2 pines + jumper, 1 kΩ, LED de 3 mm", 1, "Opcional: con el firmware de reloj interno el LED de RA5 da un destello por segundo, prueba de que el programa arrancó.", "todos", true],
+    ["J2, R5, R6", "Tira de pines y resistencias", "1 × 3 (TX, RX, GND), 2 × 1 kΩ", 1, "Opcional: adaptador USB-serie de 3.3 V para ver el mensaje de arranque (115200 8N1) y la orden ?.", "todos", true],
+    ["J4", "Bornera", "2 vías, 5.08 mm", 1, "Entrada de una fuente de 3.0–5.0 V (por ejemplo, 3.3 V de laboratorio).", "snap"],
+    ["JP1", "Tira de pines + jumper", "1 × 2", 1, "Conecta la fuente de J4 a VDD. Se pone solo cuando el programador no alimenta.", "snap"],
+    ["—", "Placa", "perforada o protoboard, cables cortos", 1, "Líneas ICSP lo más cortas posible (sección 2.4).", "todos"]
+  ];
+
+  function render(key) {
+    if (!PROG[key]) key = "pickit4";
+    var P = PROG[key];
+    document.querySelectorAll(".modes button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-prog") === key)); });
+    document.getElementById("proginfo").innerHTML = P.info;
+    document.getElementById("j1nota").innerHTML = P.j1;
+    document.getElementById("warn-prog").innerHTML = P.warn;
+    draw(key);
+    var pasos = [
+      "Pon el PIC en el zócalo con la muesca hacia el pin 1, sin alimentación.",
+      "Conecta el " + P.nombre + " a J1 con la flecha (pin 1) en VPP/MCLR, y por USB al PC.",
+      "En MPLAB X abre <span class='mono'>P2_IQ_PIC16F18426.X</span> y elige la configuración del reloj que vas a montar: <span class='mono'>default</span>, <span class='mono'>cristal_4MHz</span> u <span class='mono'>oscilador_4MHz</span>.",
+      "En <i>Project Properties › Connected Hardware Tool</i>, elige el " + P.nombre + ".",
+      P.power,
+      "Pulsa <i>Make and Program Device</i> (no <i>Debug</i>: en depuración RA0 y RA1 quedan para el depurador). Espera a <i>Programming/Verify complete</i>.",
+      "Comprueba que arranca: con la configuración <span class='mono'>default</span> y JP3 puesto, D1 da un destello por segundo. Con J2 y un terminal a 115200 baudios aparece <span class='mono'># P2 IQ - PIC16F18426 - firmware 1.4</span>; la orden <span class='mono'>?</span> lo repite.",
+      "Quita la alimentación, saca el PIC y llévalo a la placa del detector."
+    ];
+    var ol = document.getElementById("pasos"); ol.innerHTML = "";
+    pasos.forEach(function (p) { var li = document.createElement("li"); li.innerHTML = p; ol.appendChild(li); });
+    var bt = document.getElementById("bom"); bt.innerHTML = "";
+    BOM.filter(function (r) { return r[5] === "todos" || (r[5] === "snap" && P.ext); }).forEach(function (r) {
+      var tr = document.createElement("tr");
+      if (r[5] === "snap") tr.className = "changed";
+      [r[0], r[1], r[2], String(r[3]), r[4]].forEach(function (c, k) {
+        var td = document.createElement("td"); td.textContent = c;
+        if (k === 0) td.className = "ref";
+        if (k === 1 && r[6]) { td.appendChild(document.createTextNode(" ")); var s = document.createElement("span"); s.className = "chipopt"; s.textContent = "opcional"; td.appendChild(s); }
+        tr.appendChild(td);
+      });
+      bt.appendChild(tr);
+    });
+  }
+  document.querySelectorAll(".modes button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var k = b.getAttribute("data-prog");
+      try { history.replaceState(null, "", "#" + k); } catch (e) { location.hash = k; }
+      render(k);
+    });
+  });
+  window.addEventListener("hashchange", function () { render(location.hash.slice(1)); });
+  render(location.hash.slice(1) || "pickit4");
+})();
+</script>
