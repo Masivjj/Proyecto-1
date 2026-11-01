@@ -1,0 +1,53 @@
+# resumen: Buffer circular con los últimos 64 puntos (I′, Q′) del plano polar, guardado en una unión que comparte la RAM con el buffer de la captura m. Incluye una versión vacía para compilar sin traza (N_TRAZA = 0).
+@@ 1-3
+Cabecera: la traza del plano polar (P9) en un buffer circular.
+@@ 4-6
+Por qué se guardan I′ y Q′ y no el módulo y el ángulo: dibujar (r, φ) en un plano polar es lo mismo que dibujar (I′, Q′) en un plano cartesiano con la misma escala en los dos ejes (sección 4.10). Así no hay que calcular raíces ni arcotangentes por cada muestra.
+@@ 7-9
+Con la salida por UART (opción A) es el PC quien guarda y dibuja la traza larga (hasta 12 000 puntos). Esta copia corta en el PIC se puede volcar con la orden `p` y serviría de base para una pantalla local (opción B de la especificación).
+@@ 10-13
+La misma memoria hace de buffer de la captura `m`, para no gastar otros 400 bytes de los 2048 de RAM del PIC.
+@@ 14
+Incluye la cabecera propia (que trae `app_config.h`).
+@@ 16-24
+`memoria` es una **unión**: todos sus miembros empiezan en la misma dirección y ocupa lo que el mayor de ellos. Un miembro es la traza (dos arrays de 64 `float`: 512 bytes) y el otro el buffer de la captura (200 valores de 16 bits: 400 bytes). Ocupa 512 bytes en total. Solo se usa uno de los dos a la vez. Si `N_TRAZA` es 0, la parte de la traza no existe y solo queda el buffer de la captura.
+@@ 26
+A partir de aquí, la versión con traza.
+@@ 28
+Comprobación al compilar: la traza no puede tener más de 127 puntos, para que los cálculos de índices de la línea 67 quepan en 8 bits (como mucho 2 × 127 − 2 = 252 < 256).
+@@ 30-31
+Atajos para escribir `traza_i[k]` en lugar de `memoria.traza.i[k]`.
+@@ 33-34
+`siguiente`: posición donde se escribirá el próximo punto. `cuenta`: cuántos puntos válidos hay (0 a 64).
+@@ 36-39
+`traza_agregar()`: escribe el punto en la posición `siguiente`.
+@@ 40-42
+Avanza la posición de forma circular: después de la 63 vuelve a la 0, sobrescribiendo el punto más antiguo.
+@@ 43-46
+Cuenta el punto hasta llenar la traza; a partir de ahí la cuenta se queda en 64.
+@@ 48-52
+`traza_borrar()`: basta con volver a la posición 0 y dejar la cuenta en 0; los datos viejos se sobrescribirán.
+@@ 54-57
+`traza_puntos()`: devuelve la cuenta.
+@@ 59-61
+`traza_leer()`: `k` será la posición real en el array.
+@@ 63-65
+Si se pide un punto que no existe, devuelve `false`.
+@@ 66-70
+Calcula la posición: el más antiguo está `cuenta` posiciones por detrás de `siguiente`; se suma `N_TRAZA` antes de restar para no pasar por negativos (son enteros sin signo) y luego se resta `N_TRAZA` si se pasó del final. Es un módulo sin usar la operación `%`, que en el PIC sería una división.
+@@ 71-74
+Devuelve el punto por los punteros y `true`.
+@@ 76
+Si `N_TRAZA` es 0, se compilan estas versiones vacías, para que el resto del programa no tenga que cambiar.
+@@ 78-82
+`traza_agregar()` vacía. `(void)i1;` le dice al compilador que el parámetro se ignora a propósito (evita el aviso de "parámetro sin usar").
+@@ 84-86
+`traza_borrar()` vacía.
+@@ 88-91
+`traza_puntos()` siempre 0.
+@@ 93-99
+`traza_leer()` siempre `false`.
+@@ 101
+Fin del `#if` de la línea 26.
+@@ 103-107
+`traza_prestar_memoria()` (en las dos versiones): vacía la traza y devuelve la dirección del buffer de la captura dentro de la unión. A partir de ahí la captura escribe sobre la memoria de la traza; cuando termina, `comunicacion.c` vuelve a borrar la traza para que no se lean como puntos los códigos de la captura.

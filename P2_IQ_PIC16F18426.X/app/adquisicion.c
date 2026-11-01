@@ -4,9 +4,9 @@
  * El ADC trabaja en modo basico (MD = 000, seccion 32.2.7 de la hoja de
  * datos) y cada conversion la arranca el flanco de subida del PWM6_out
  * (ADACT, disparo de autoconversion, seccion 32.2.6), sin intervencion del
- * software. El PWM6 usa el TMR2 (FOSC/4, prescaler 1:4, T2PR = 199):
+ * software. El PWM6 usa el TMR2 (FOSC/4, T2PR = 199, prescaler 1:4 o 1:2):
  * un flanco cada 100 us. Con el reloj del ADC derivado de FOSC (ADCS = 0,
- * FOSC/32) el condensador de muestreo se desconecta un numero fijo de ciclos
+ * TAD = 1 us) el condensador de muestreo se desconecta un numero fijo de ciclos
  * de FOSC despues del flanco, asi que el jitter del instante de muestreo es
  * el del oscilador: no le afectan las interrupciones ni el lazo principal.
  * Con FRC (ADCS = 1), en cambio, el inicio no estaria sincronizado con FOSC.

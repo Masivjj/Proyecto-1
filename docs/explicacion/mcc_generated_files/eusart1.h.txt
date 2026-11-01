@@ -1,0 +1,45 @@
+# resumen: Interfaz del driver de la UART (EUSART1) generado por MCC: 115200 baudios 8N1 con buffers circulares de transmisión (128 bytes) y recepción (8 bytes) gestionados por interrupción, más las funciones para leer, escribir y consultar su estado.
+@@ 1-8
+Cabecera estilo MCC: la EUSART1 en modo asíncrono a 115200 baudios con buffers por interrupción.
+@@ 9-13
+Configuración: formato **8N1** (8 bits de datos, sin paridad, 1 bit de parada); generador de baudios de 16 bits (BRG16 = 1) en alta velocidad (BRGH = 1), con lo que la velocidad es FOSC / (4 × (SP1BRG + 1)): con 32 MHz y SP1BRG = 68 da 115 942 baudios (+0.6 %); con 16 MHz y 34, 114 286 (−0.8 %). Una UART tolera unos ±2 % de diferencia entre emisor y receptor, así que los dos casos son válidos. TX sale por RC4 y RX entra por RC5 (asignados con PPS). Buffer de transmisión de 128 bytes y de recepción de 8.
+@@ 15-16
+Guarda de inclusión.
+@@ 18-24
+Inclusiones: registros y tipos estándar.
+@@ 26-30
+Inicio del bloque de compatibilidad con C++.
+@@ 33-37
+`EUSART1_DataReady`: nombre antiguo de `EUSART1_is_rx_ready()`, que MCC mantiene por compatibilidad.
+@@ 39-41
+Comentario de sección.
+@@ 43-51
+`eusart1_status_t`: el estado de un byte recibido. Es una unión que permite verlo como tres bits de error (paridad, `perr`; trama, `ferr`; desbordamiento, `oerr`) y 5 de reserva, o como un byte completo (`status`) para comprobar de una vez si hubo algún error.
+@@ 53-57
+Variables globales del driver visibles desde fuera (`extern`): cuánto sitio queda en el buffer de transmisión y cuántos bytes hay en el de recepción. Son `volatile` porque las cambian las interrupciones.
+@@ 59-64
+Punteros a las funciones de interrupción de transmisión y recepción, que llama `interrupt_manager.c`.
+@@ 66-68
+Comentario de sección.
+@@ 70
+`EUSART1_Initialize()`: configura la UART (desde `SYSTEM_Initialize()`).
+@@ 71
+`EUSART1_is_tx_ready()`: si queda sitio en el buffer de transmisión.
+@@ 72
+`EUSART1_is_rx_ready()`: si hay bytes recibidos. **La usa `comunicacion.c`.**
+@@ 73
+`EUSART1_is_tx_done()`: si el último bit ya salió físicamente.
+@@ 74
+`EUSART1_get_last_status()`: el estado (errores) del último byte leído.
+@@ 75
+`EUSART1_Read()`: saca un byte del buffer de recepción. **La usa `comunicacion.c`.**
+@@ 76
+`EUSART1_Write()`: mete un byte en el buffer de transmisión. **La usa `comunicacion.c`** para todo lo que envía.
+@@ 77-79
+Las rutinas de interrupción de transmisión y recepción y el manejador que guarda el dato recibido.
+@@ 80-84
+Funciones para instalar manejadores propios de errores (trama, desbordamiento, general) y de las interrupciones. Se usan dentro de la inicialización con los manejadores por defecto.
+@@ 86-90
+Cierre del bloque de C++.
+@@ 92
+Cierre de la guarda de inclusión.

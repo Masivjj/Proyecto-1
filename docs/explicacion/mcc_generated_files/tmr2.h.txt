@@ -1,0 +1,53 @@
+# resumen: Interfaz del driver del temporizador TMR2 generado por MCC: describe la base de tiempo de 100 µs del disparo del ADC, enumera los modos del temporizador con extensión HLT (Hardware Limit Timer) y declara las funciones del driver, de las que la aplicación solo usa la inicialización.
+@@ 1-8
+Cabecera estilo MCC: el TMR2 es la base de tiempo del PWM6, que dispara el ADC.
+@@ 9-14
+Cálculo del periodo: el TMR2 cuenta FOSC/4 (8 MHz con el reloj interno, 4 MHz con el externo) dividido por el prescaler (1:4 o 1:2), es decir 2 MHz en ambos casos, y se reinicia al llegar a T2PR = 199 (200 cuentas): 200 / 2 MHz = **100.000 µs exactos**. Postscaler 1:1 y sin interrupción: el TMR2 solo marca el periodo del PWM6, cuyo flanco de subida arranca cada conversión del ADC (`ADACT = PWM6_out`).
+@@ 16-17
+Guarda de inclusión.
+@@ 19-21
+Comentario de sección de MCC.
+@@ 23-24
+Tipos estándar.
+@@ 26-30
+Compatibilidad con C++: si se compilara como C++, `extern "C"` evita que el compilador cambie los nombres de las funciones. En XC8 (C) no tiene efecto. Es código estándar de MCC.
+@@ 33-43
+Documentación del tipo enumerado siguiente: los modos de funcionamiento del temporizador con la extensión HLT (*Hardware Limit Timer*), que se seleccionan en el registro T2HLT.
+@@ 45-46
+`typedef enum {`: un tipo con nombres simbólicos para cada modo.
+@@ 48-50
+Comentario general de los modos *Roll-over Pulse* (ROP): el contador se reinicia al igualar el periodo y sigue contando. Es el modo de un temporizador periódico normal.
+@@ 52-55
+`TMR2_ROP_STARTS_TMRON` (valor 0): cuenta libre, arranca al poner ON = 1 por software. **Es el modo que usa el proyecto** (T2HLT = 0 en `tmr2.c`).
+@@ 57-90
+Los otros siete modos ROP (valores 1-7), en los que una señal externa (`TMRx_ers`) arranca, para o reinicia el contador según su nivel o sus flancos. No se usan.
+@@ 92-96
+Comentario de los modos *One-Shot* (un solo ciclo): al llegar al periodo el contador se reinicia y el bit ON se borra; hay que volver a ponerlo para otro ciclo.
+@@ 98-139
+Los modos One-Shot (valores 8-15): arranque por software o por flancos/niveles de la señal externa. No se usan.
+@@ 141-149
+Dos modos One-Shot más con valores explícitos (0x16 y 0x17), porque en la tabla del registro no son consecutivos con los anteriores.
+@@ 151-154
+Comentario de los modos *Mono-Stable*: como One-Shot, pero el bit ON no se borra; el temporizador espera un nuevo flanco externo para repetir.
+@@ 156-170
+Los tres modos monoestables (0x11-0x13). No se usan.
+@@ 172
+Nombre del tipo: `TMR2_HLT_MODE`.
+@@ 175-181
+Comentarios de sección de MCC (sin macros declaradas).
+@@ 183
+`TMR2_Initialize()`: la única función del driver que usa el proyecto (desde `SYSTEM_Initialize()`).
+@@ 184
+`TMR2_ModeSet()`: cambia el modo HLT en marcha.
+@@ 185-188
+Arrancar y parar el temporizador (con dos nombres cada una: MCC mantiene los nombres antiguos por compatibilidad).
+@@ 189-192
+Leer y escribir el contador de 8 bits (también con nombre nuevo y antiguo).
+@@ 193-194
+Cambiar el periodo (T2PR).
+@@ 195
+Consultar (y borrar) el indicador de fin de periodo.
+@@ 198-202
+Cierre del bloque de compatibilidad con C++.
+@@ 204
+Cierre de la guarda de inclusión.

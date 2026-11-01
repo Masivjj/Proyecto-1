@@ -1,0 +1,51 @@
+# resumen: Driver del TMR2 generado por MCC. Lo importante es TMR2_Initialize(), que configura el temporizador para un periodo de 100 µs exactos con cualquiera de los dos relojes; las demás funciones son utilidades estándar de MCC que el proyecto no usa.
+@@ 1-11
+Cabecera estilo MCC: base de tiempo de 100 µs del PWM6 que dispara el ADC.
+@@ 13-15
+Comentario de sección.
+@@ 17-19
+`<xc.h>` (registros), la cabecera del driver y `device_config.h`, que trae la opción `RELOJ` para elegir el prescaler.
+@@ 21-27
+Comentarios de sección de MCC.
+@@ 29-31
+`TMR2_Initialize()`.
+@@ 33-34
+`T2CLKCON` = 0x01: el reloj del TMR2 es FOSC/4 (registro T2CLKCON, campo CS = 0001, comprobado en la hoja de datos). Al ser derivado de FOSC, el periodo es tan preciso como el oscilador y está sincronizado con el reloj del ADC.
+@@ 36-37
+`T2HLT` = 0: modo de cuenta libre por software (*Roll-over Pulse* con arranque por ON), sin sincronización ni señales externas.
+@@ 39-40
+`T2RST` = 0: fuente de la señal externa de reinicio (no se usa en este modo).
+@@ 42-43
+`T2PR` = 0xC7 = 199: el contador va de 0 a 199 y se reinicia: 200 cuentas por periodo.
+@@ 45-46
+Contador a 0 para empezar el primer periodo completo.
+@@ 48-49
+Borra el indicador de periodo del TMR2 (TMR2IF, en PIR4). No se usa su interrupción.
+@@ 51-57
+`T2CON`: enciende el temporizador (bit 7, ON) con el prescaler según el reloj: con el externo (16 MHz) 0x90 = prescaler 1:2 (CKPS = 001): 4 MHz / 2 / 200 = 10 kHz; con el interno (32 MHz) 0xA0 = 1:4 (CKPS = 010): 8 MHz / 4 / 200 = 10 kHz. Postscaler 1:1 (OUTPS = 0000) en los dos. El resultado es el mismo periodo de 100 µs; `tests/verificar_reloj.py` lo calcula a partir de estos valores.
+@@ 58
+Fin de `TMR2_Initialize()`.
+@@ 60-64
+`TMR2_ModeSet()`: escribe el modo HLT en el campo MODE de T2HLT. Sin uso.
+@@ 66-70
+`TMR2_Start()`: pone a 1 el bit ON. Sin uso (el temporizador ya arranca en la inicialización).
+@@ 72-75
+`TMR2_StartTimer()`: nombre antiguo de la misma función.
+@@ 77-81
+`TMR2_Stop()`: pone ON a 0. Sin uso.
+@@ 83-86
+`TMR2_StopTimer()`: nombre antiguo.
+@@ 88-95
+`TMR2_Counter8BitGet()`: lee el valor actual del contador (`TMR2` es el nombre heredado de T2TMR). Sin uso.
+@@ 97-100
+`TMR2_ReadTimer()`: nombre antiguo.
+@@ 102-106
+`TMR2_Counter8BitSet()`: escribe el contador. Sin uso.
+@@ 108-111
+`TMR2_WriteTimer()`: nombre antiguo.
+@@ 113-116
+`TMR2_Period8BitSet()`: escribe el periodo (`PR2` es el nombre heredado de T2PR). Sin uso.
+@@ 118-121
+`TMR2_LoadPeriodRegister()`: nombre antiguo.
+@@ 123-133
+`TMR2_HasOverflowOccured()`: devuelve si el contador llegó al periodo (TMR2IF) y, si es así, borra el indicador. Sin uso: el periodo lo aprovecha directamente el PWM6 por hardware.

@@ -1,0 +1,43 @@
+# resumen: Inicialización del sistema generada con MCC: habilita los módulos, configura los pines y el oscilador (32 MHz, o 16 MHz con la opción de reloj externo) y después los periféricos en el orden correcto (FVR, TMR2, PWM6, ADC y UART).
+@@ 1-15
+Cabecera. Resume la configuración: HFINTOSC a 32 MHz (FOSC = 32 MHz, 8 MIPS: el PIC ejecuta una instrucción cada 4 ciclos de reloj) o, con la opción de reloj externo, a 16 MHz hasta que `app/reloj.c` pasa al externo con PLL ×4 (FOSC = 16 MHz, 4 MIPS). Todos los módulos habilitados en PMD. El ADC se inicializa después del TMR2 y del PWM6 que lo disparan.
+@@ 17
+Incluye `mcc.h`, que trae todo lo demás.
+@@ 20-21
+`SYSTEM_Initialize()`.
+@@ 23
+Primero habilita los módulos (PMD): un periférico deshabilitado en PMD no responde a sus registros.
+@@ 24
+Configura los pines (dirección, analógico/digital, pull-ups, PPS de la UART) antes que los periféricos que los usan.
+@@ 25
+El oscilador (frecuencia del HFINTOSC).
+@@ 26
+El FVR (referencia de 1.024 V para el ADC); tarda unos 60 µs en estabilizarse, por eso se habilita pronto.
+@@ 27-28
+TMR2 y PWM6: la base de tiempo y la señal que dispara el ADC cada 100 µs. Se configuran antes que el ADC.
+@@ 29
+El ADC: modo básico, reloj FOSC, referencia VDD, disparo `PWM6_out`.
+@@ 30
+La UART a 115200 baudios con sus buffers e interrupciones.
+@@ 31
+Fin de `SYSTEM_Initialize()`.
+@@ 33-34
+`OSCILLATOR_Initialize()`.
+@@ 35-36
+OSCCON1 = 0x60: fuente nueva HFINTOSC (NOSC = 110) sin división (NDIV = 1:1). Los comentarios `//` son los que genera MCC, con el valor de cada campo.
+@@ 37-38
+OSCCON3 = 0: CSWHOLD = 0 (los cambios de reloj se completan solos, sin esperar a software) y oscilador secundario en bajo consumo (no se usa).
+@@ 39-40
+OSCEN = 0: no se fuerza el encendido de ningún oscilador; cada uno se enciende cuando se usa.
+@@ 41-48
+OSCFRQ: la frecuencia del HFINTOSC. Con reloj externo, 16 MHz (0x05): así el PIC ya funciona a la misma frecuencia que dará el externo ×4, y `reloj.c` puede cambiar de fuente sin tocar los periféricos; si el externo no arranca, sigue con esta. Con reloj interno, 32 MHz (0x06). El `#if` lo decide al compilar según `RELOJ`.
+@@ 49-50
+OSCTUNE = 0: sin ajuste fino de la frecuencia del HFINTOSC (se usa la calibración de fábrica).
+@@ 51
+Fin de `OSCILLATOR_Initialize()`.
+@@ 53-54
+`PMD_Initialize()`.
+@@ 55-70
+Los ocho registros PMD a 0: todos los módulos habilitados (en PMD, un 1 apaga el módulo). MCC lo genera así por defecto; el comentario de cada línea lista los módulos de ese registro (temporizadores, ADC, comparadores, CCP/PWM, EUSART, MSSP, CLC…). Se podrían apagar los no usados para ahorrar unos µA, pero no es relevante con la alimentación de la tarjeta.
+@@ 71
+Fin de `PMD_Initialize()`.

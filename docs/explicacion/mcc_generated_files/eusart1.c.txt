@@ -1,0 +1,97 @@
+# resumen: Driver de la UART generado por MCC. Configura 115200 baudios 8N1 y usa dos buffers circulares: la aplicación escribe en el de transmisión y la interrupción lo va vaciando; la interrupción de recepción llena el de recepción y la aplicación lo lee. Así enviar una línea no detiene el programa mientras quede sitio.
+@@ 1-11
+Cabecera estilo MCC.
+@@ 13-17
+Inclusiones: la cabecera del driver y `device_config.h`, que aporta la opción `RELOJ` para elegir el valor del generador de baudios.
+@@ 19-24
+Tamaños de los buffers: 128 bytes para transmitir (más que la línea más larga, unos 95 caracteres) y 8 para recibir (las órdenes son de un carácter y se leen cada 10 ms).
+@@ 26-32
+Variables del buffer de **transmisión**: `Head` es donde escribe la aplicación, `Tail` donde lee la interrupción, el array de 128 bytes y `Remaining`, cuántos huecos quedan. Un buffer circular: los índices vuelven a 0 al llegar al final.
+@@ 34-39
+Variables del buffer de **recepción**: índices de escritura (interrupción) y lectura (aplicación), los datos, el estado de cada byte (errores), cuántos hay y el estado del último leído.
+@@ 41-45
+Comentario de sección y los punteros a las funciones de interrupción de transmisión y recepción (los llama `interrupt_manager.c`).
+@@ 47-49
+Punteros a los manejadores de error de trama, de desbordamiento y general.
+@@ 51-53
+Declaraciones adelantadas de los manejadores de error por defecto (se definen al final del archivo).
+@@ 55-57
+`EUSART1_Initialize()`. Primero deshabilita las interrupciones de la UART mientras cambia su configuración.
+@@ 58-61
+Instala las rutinas de interrupción de recepción y transmisión y deja ambas interrupciones deshabilitadas.
+@@ 62-65
+`BAUD1CON` = 0x08: BRG16 = 1 (generador de baudios de 16 bits), polaridad normal, sin autodetección de velocidad ni despertar por recepción.
+@@ 67-68
+`RC1STA` = 0x90: SPEN = 1 (habilita el puerto serie y toma el control de los pines) y CREN = 1 (recepción continua), 8 bits.
+@@ 70-71
+`TX1STA` = 0x24: TXEN = 1 (habilita la transmisión), SYNC = 0 (asíncrono) y BRGH = 1 (alta velocidad), 8 bits.
+@@ 73-79
+`SP1BRGL`: el divisor del generador de baudios según el reloj. Con 16 MHz, 34: 16 000 000 / (4 × 35) = 114 286 baudios (−0.8 %); con 32 MHz, 68: 32 000 000 / (4 × 69) = 115 942 baudios (+0.6 %). La fórmula FOSC/[4(n+1)] es la de la hoja de datos para BRG16 = BRGH = 1.
+@@ 81-82
+`SP1BRGH` = 0: el byte alto del divisor.
+@@ 85-87
+Instala los manejadores de error por defecto.
+@@ 89
+Sin errores registrados.
+@@ 91-94
+Buffer de transmisión vacío: índices a 0 y los 128 huecos libres.
+@@ 96-98
+Buffer de recepción vacío.
+@@ 100-102
+Habilita la interrupción de recepción: desde ahora cada byte que llegue se guardará en el buffer (cuando `main` habilite GIE y PEIE). La de transmisión se habilita solo cuando hay algo que enviar.
+@@ 104-107
+`EUSART1_is_tx_ready()`: `true` si queda algún hueco en el buffer de transmisión.
+@@ 109-112
+`EUSART1_is_rx_ready()`: `true` si hay algún byte recibido sin leer. `com_tarea()` la usa para no bloquearse en `EUSART1_Read()`.
+@@ 114-117
+`EUSART1_is_tx_done()`: el bit TRMT indica que el registro de desplazamiento está vacío (el último bit ya salió).
+@@ 119-121
+`EUSART1_get_last_status()`: devuelve el estado del último byte leído.
+@@ 123-125
+`EUSART1_Read()`.
+@@ 127-129
+Espera a que haya un byte. Como la aplicación solo la llama cuando `EUSART1_is_rx_ready()` es verdadero, nunca espera.
+@@ 131
+Guarda el estado de error del byte que se va a leer.
+@@ 133-137
+Lee el byte de la posición de lectura y avanza el índice circularmente.
+@@ 138-140
+Descuenta el byte con la interrupción de recepción deshabilitada, para que la interrupción no modifique el contador a la vez (sección crítica corta).
+@@ 142-143
+Devuelve el byte.
+@@ 145-149
+`EUSART1_Write()`. Si el buffer de transmisión está lleno, **espera** a que la interrupción libere un hueco. Es el único punto en que enviar texto puede detener el programa; por eso `comunicacion.c` reparte los textos largos en varias tramas.
+@@ 151-154
+Si la interrupción de transmisión está deshabilitada, no hay nada enviándose: el byte va directo al registro de transmisión TX1REG.
+@@ 155-164
+Si no, se está transmitiendo: con la interrupción deshabilitada un momento (para no competir con ella), guarda el byte en el buffer, avanza el índice circularmente y descuenta un hueco.
+@@ 165-166
+Habilita (o rehabilita) la interrupción de transmisión, que irá enviando el buffer byte a byte cada vez que TX1REG quede libre (cada ~87 µs a 115200 baudios).
+@@ 168-171
+`EUSART1_Transmit_ISR()`: la rutina de interrupción de transmisión; se ejecuta cuando TX1REG queda libre. El comentario es de MCC.
+@@ 172-180
+Si queda algo en el buffer, mete el siguiente byte en TX1REG, avanza el índice de lectura circularmente y cuenta un hueco libre más.
+@@ 181-185
+Si el buffer está vacío, deshabilita la interrupción de transmisión (si no, entraría continuamente porque TX1REG está libre).
+@@ 187-190
+`EUSART1_Receive_ISR()`: la rutina de interrupción de recepción, al llegar un byte. Empieza con el estado del byte sin errores.
+@@ 192-195
+**Error de trama** (FERR): el bit de parada no llegó a 1 (velocidad distinta, ruido o línea cortada). Se marca y se llama a su manejador (vacío por defecto).
+@@ 197-200
+**Desbordamiento** (OERR): llegaron bytes más rápido de lo que se leyeron y el FIFO de 2 bytes del hardware se llenó. Se marca y se llama a su manejador, que reinicia la recepción.
+@@ 202-206
+Si hubo algún error, se llama al manejador general (que por defecto guarda el byte igualmente, con su estado de error); si no, al manejador normal que guarda el dato.
+@@ 208-209
+Comentario de MCC y fin de la rutina.
+@@ 211-213
+`EUSART1_RxDataHandler()`: lee el byte recibido (RC1REG, lo que además borra la petición de interrupción) y lo guarda en la posición de escritura del buffer.
+@@ 214-219
+Avanza el índice circularmente y cuenta el byte. No comprueba si el buffer de 8 bytes está lleno: con órdenes de un carácter leídas cada 10 ms no ocurre.
+@@ 221
+Manejador por defecto del error de trama: no hace nada.
+@@ 223-229
+Manejador por defecto del desbordamiento: apaga y vuelve a encender la recepción continua (CREN = 0 y 1), que es la forma de borrar OERR según la hoja de datos; sin esto la UART dejaría de recibir.
+@@ 231-233
+Manejador general por defecto: guarda el byte aunque haya tenido error.
+@@ 235-253
+Funciones que instalan cada manejador guardando el puntero a función correspondiente.

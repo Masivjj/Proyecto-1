@@ -1,0 +1,23 @@
+# resumen: Interfaz del driver del PWM6, cuya señal (periodo de 100 µs, 50 % de ciclo de trabajo) es el disparo por hardware de cada conversión del ADC.
+@@ 1-8
+Cabecera estilo MCC: el PWM6 es el disparo por hardware de las conversiones del ADC.
+@@ 9-14
+Base de tiempo TMR2 (100 µs) y ciclo de trabajo del 50 %. El flanco de subida, que ocurre cuando el TMR2 se reinicia, arranca una conversión del ADC (ADACT = `PWM6_out`). La aplicación puede sacar la señal por RA1 para medir el jitter con un osciloscopio (opción `SALIDA_DISPARO`).
+@@ 16-17
+Guarda de inclusión.
+@@ 19-25
+Sección de inclusiones: registros y tipos estándar.
+@@ 27-31
+Inicio del bloque de compatibilidad con C++ (sin efecto en C).
+@@ 33-35
+Comentario de sección.
+@@ 37
+`PWM6_Initialize()`: la única que usa el proyecto.
+@@ 38
+`PWM6_LoadDutyValue()`: cambiar el ciclo de trabajo (sin uso).
+@@ 39
+`PWM6_OutputStatusGet()`: leer el nivel actual de la salida del PWM (sin uso).
+@@ 41-45
+Cierre del bloque de C++.
+@@ 47
+Cierre de la guarda de inclusión.

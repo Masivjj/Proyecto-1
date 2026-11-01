@@ -1,0 +1,117 @@
+# resumen: El corazón del muestreo. Configura el ADC para que cada conversión la arranque el PWM6 por hardware cada 100 µs, y en la interrupción de fin de conversión reparte los resultados en rondas de 1 ms (cada entrada a 1000 muestras/s), los suma por canal, cierra una trama cada 10 ms y la deja en una cola que vacía main(). También hace la captura de la orden m.
+@@ 1-3
+Cabecera: este archivo hace las conversiones del ADC disparadas por el PWM6.
+@@ 4-12
+Explica cómo se consigue un instante de muestreo preciso. El ADC (ADCC del PIC) está en **modo básico** (bits MD = 000; sección 32.2.7 de la hoja de datos): una conversión simple por cada disparo. El disparo es el flanco de subida de la señal interna `PWM6_out`, seleccionada en el registro ADACT (disparo de autoconversión, sección 32.2.6), así que **ninguna instrucción interviene** en el inicio de la conversión. El PWM6 usa como base de tiempo el TMR2, que cuenta FOSC/4 con un prescaler (1:4 a 32 MHz, 1:2 a 16 MHz) hasta T2PR = 199: un flanco cada 100 µs. Como el reloj del ADC sale de FOSC (ADCS = 0, TAD = 1 µs), el condensador de muestreo se desconecta un número fijo de ciclos de FOSC después del flanco: el instante de muestreo solo tiene el jitter del oscilador, sin influencia de interrupciones ni del lazo principal. Con el oscilador FRC propio del ADC (ADCS = 1) el inicio no estaría sincronizado con FOSC y aparecería un jitter de hasta 1 TAD.
+@@ 13-23
+Explica el reparto en el tiempo. Cada ronda de 1 ms son 10 disparos: las posiciones 0 a 5 son I_OUT, Q_OUT, V_REF, VCC_A, FVR y AVSS, y las 4 restantes son disparos libres (convierten AVSS y el resultado se descarta). Como cada canal ocupa siempre la misma posición, se muestrea exactamente cada 1 ms: 1000 muestras/s, con el periodo fijado por el TMR2. Una trama son 10 rondas (10 ms). Al terminar cada conversión, la interrupción suma el resultado en su canal y elige el canal de la siguiente, que tiene unos 85 µs para asentarse (la conversión termina ~22 µs después del flanco y el siguiente flanco llega a los 100 µs, más 8 µs de adquisición). Al terminar la trama, las sumas pasan a una cola que vacía `main()`, así que un retraso del lazo no retrasa las muestras.
+@@ 24-27
+La captura de la orden `m` no para las tramas: copia las mismas conversiones de I_OUT que se están procesando, una por ronda.
+@@ 28-29
+Incluye `mcc.h` (registros, drivers de MCC y `app_config.h` a través de `device_config.h`) y la cabecera propia del módulo. La ruta `../` es porque este archivo está en `app/`.
+@@ 31-37
+Números de canal del multiplexor del ADC (registro ADPCH, tabla 32-4 de la hoja de datos, comprobados en la revisión C): RC0/ANC0 = 0x10 (I_OUT), RC1/ANC1 = 0x11 (Q_OUT), RC2/ANC2 = 0x12 (V_REF), RC3/ANC3 = 0x13 (VCC_A), 0x3B = AVSS (0 V interno, para medir el offset del ADC) y 0x3E = salida 1 del FVR (1.024 V). Se seleccionan por número, así que no dependen de los nombres de pin que se den en MCC.
+@@ 39
+`ADACT_PWM6_OUT` = 0x0E: valor de ADACT que selecciona `PWM6_out` como disparo (tabla 32-6: 01110).
+@@ 40
+`ADMD_BASICO` = 0: modo básico del ADCC (sin promediado, filtro ni acumulación por hardware).
+@@ 41
+`PPS_PWM6OUT` = 0x0D: código del selector de pines periféricos (PPS) para sacar `PWM6OUT` por un pin (tabla 16-3: 001101). Se escribe en RA1PPS.
+@@ 43
+`N_CANALES` = 6: canales que se convierten en cada ronda (los 4 externos, FVR y AVSS).
+@@ 45-48
+Comprobaciones **en tiempo de compilación** (equivalentes a `static_assert`, que C99 no tiene): se declara un tipo array de tamaño 1 si la condición se cumple y de tamaño −1 si no; un tamaño negativo es un error de compilación. Comprueban que los 6 canales caben en una ronda (línea 45), que la ronda dura exactamente 1 ms (46), que una trama dura exactamente 10 ms (47) y que la suma de 10 conversiones de 12 bits cabe en 16 bits: 10 × 4095 = 40950 ≤ 65535 (48). Si alguien cambia las constantes de forma incoherente, el programa no compila.
+@@ 50-51
+`enum` con el índice de cada canal en el array de sumas: `IDX_I` = 0, `IDX_Q` = 1, `IDX_R` = 2 (V_REF), `IDX_V` = 3 (VCC_A), `IDX_F` = 4 (FVR), `IDX_Z` = 5 (AVSS, el "cero"). La posición en la ronda coincide con el índice.
+@@ 52-54
+`secuencia[]`: el canal del ADC que corresponde a cada posición de la ronda. Es `static const`: el compilador la guarda en memoria de programa (Flash), no en RAM.
+@@ 56-59
+`trama_t`: una trama terminada. `suma[6]` son las sumas de 10 conversiones de cada canal (16 bits cada una) y `numero` el número de trama (32 bits). Son 16 bytes por trama.
+@@ 61-65
+Estado de la interrupción, todo `static volatile`. `volatile` le dice al compilador que estas variables pueden cambiar fuera del flujo normal del programa (en la interrupción), así que debe leerlas de memoria cada vez y no guardarlas en registros. `suma[]` acumula la trama en curso; `ranura` es la posición (0-9) de la conversión que está terminando; `ronda` cuenta las rondas de la trama (0-9); `num_trama` cuenta tramas desde el arranque.
+@@ 67-70
+La **cola circular** de tramas: `cola[4]` guarda hasta 4 tramas; `cola_escr` es el índice donde escribe la interrupción, `cola_lect` donde lee `main` y `cola_n` cuántas hay. `perdidas` cuenta las tramas que no cupieron. Escribe la interrupción y lee `main`, por eso son `volatile`.
+@@ 72-73
+Estado de la captura `m` como máquina de estados: `CAP_NADA` (sin captura), `CAP_PEDIDA` (pedida, empieza en la próxima trama), `CAP_EN_CURSO` (copiando conversiones) y `CAP_LISTA` (buffer lleno, esperando a enviarse).
+@@ 74-76
+Variables de la captura: el estado; `cap_buf`, un puntero al buffer (`uint16_t * volatile`: el **puntero** es volátil porque lo cambia `main` y lo usa la interrupción; los datos a los que apunta no hace falta que lo sean); `cap_n` el número de conversiones pedidas y `cap_i` cuántas lleva.
+@@ 78-80
+`fin_de_trama()`: se ejecuta dentro de la interrupción al terminar la décima ronda. `k` es el índice de los bucles.
+@@ 82
+Cuenta la trama (aunque luego se pierda, para que la base de tiempo siga siendo correcta).
+@@ 83-87
+Si hay sitio en la cola, copia las 6 sumas y el número de trama en la posición de escritura.
+@@ 88-90
+Avanza el índice de escritura de forma circular: después de la posición 3 vuelve a la 0.
+@@ 91
+Hay una trama más en la cola.
+@@ 92-94
+Si la cola estaba llena (`main` lleva 40 ms de retraso), la trama se descarta y se cuenta como perdida. Se prefiere perder la trama más nueva a corromper las que esperan.
+@@ 95-97
+Pone a cero las sumas para empezar la trama siguiente.
+@@ 98-101
+Si `main` pidió una captura, empieza ahora, alineada con el comienzo de una trama: índice a 0 y estado en curso.
+@@ 102
+Fin de `fin_de_trama()`.
+@@ 104-107
+`al_terminar_conversion()`: la función que se ejecuta en la interrupción del ADC (ADIF) cada vez que termina una conversión, es decir cada 100 µs. La registra `adq_inicializar()` en el driver de MCC. Lo primero que hace es leer el resultado de 12 bits (registros ADRESH:ADRESL) con la función de MCC.
+@@ 109-110
+Si la conversión que termina es de uno de los 6 canales (posiciones 0-5), suma el resultado en su canal. La posición es directamente el índice del array.
+@@ 111-116
+Si además es la conversión de I_OUT y hay una captura en curso, copia el resultado al buffer de la captura. Cuando se han copiado `cap_n` valores, la captura queda lista. Así la captura recibe exactamente una conversión de I_OUT por ms.
+@@ 117
+Si la posición es 6-9 (disparo libre), no se hace nada: el resultado (AVSS) se descarta.
+@@ 119-125
+Avanza la posición en la ronda. Al completar 10 disparos vuelve a 0 y cuenta una ronda; al completar 10 rondas (100 disparos, 10 ms) cierra la trama.
+@@ 127-128
+Elige el canal de la **próxima** conversión escribiendo en ADPCH: el de la nueva posición si es 0-5, o AVSS en los disparos libres. Se hace justo al terminar la conversión anterior, para que el condensador de muestreo tenga los ~85 µs hasta el siguiente disparo para cargarse con la nueva entrada. El operador `? :` elige entre dos valores.
+@@ 129
+Fin de la interrupción.
+@@ 131-134
+`adq_inicializar()`: `k` para el bucle; `espera` para no esperar indefinidamente al FVR.
+@@ 136-141
+Fija, aunque MCC ya lo deja así, los bits de los que depende todo el esquema: `ADCONT` = 0 (una sola conversión por disparo, no continuo), `ADCS` = 0 (reloj del ADC derivado de FOSC, síncrono con el disparo), `ADMD` = básico y `ADACT` = disparo por `PWM6_out`. Así, aunque alguien regenere con MCC con otros valores, el muestreo sigue siendo el correcto.
+@@ 143-147
+Pone a cero las sumas y empieza en la posición 0 de la ronda 0.
+@@ 148
+El primer canal que se convertirá es el de la posición 0 (I_OUT).
+@@ 149
+Registra `al_terminar_conversion` como la función que debe llamar la interrupción del ADC. MCC guarda un puntero a función y lo llama desde `ADCC_ISR()`.
+@@ 150-151
+Borra el indicador de interrupción pendiente del ADC (ADIF, que pudo activarse con conversiones anteriores) y habilita la interrupción del ADC (ADIE). Todavía no se ejecutará porque GIE y PEIE están desactivados hasta `main`.
+@@ 153-162
+Solo si `SALIDA_DISPARO` vale 1 y no es una compilación de depuración (`__DEBUG` lo define MPLAB X al depurar; entonces RA1 es del depurador): saca la señal del PWM6 por RA1. `RA1PPS` = 0x0D conecta la salida del PWM6 al pin; `ANSA1` = 0 lo hace digital; `SLRA1` = 0 quita la limitación de pendiente (flancos rápidos: un flanco lento convierte el ruido de tensión en jitter aparente en el osciloscopio); `TRISA1` = 0 lo hace salida. Cada flanco de subida en RA1 es el instante de una conversión: midiendo su jitter se mide el del muestreo.
+@@ 164-165
+Espera a que el FVR (referencia de 1.024 V) esté estable, con un límite de 20000 vueltas para no colgarse si nunca lo indicara. El FVR se habilitó en `SYSTEM_Initialize()` y tarda unos 60 µs (parámetro FVR04), así que en la práctica no espera.
+@@ 166
+Fin de `adq_inicializar()`.
+@@ 168-170
+`adq_leer()`: `hay` indica si había una trama.
+@@ 172
+**Sección crítica**: deshabilita las interrupciones mientras lee la cola. Si la interrupción escribiera en la cola a mitad de la lectura (por ejemplo, entre leer `cola_n` y decrementarlo), el estado quedaría corrupto. Las conversiones siguen en el hardware; si una termina ahora, su interrupción queda pendiente y se atiende en cuanto se rehabiliten (unos µs después).
+@@ 173
+¿Hay al menos una trama en la cola?
+@@ 174-178
+Copia las sumas de I_OUT, Q_OUT, V_REF y VCC_A a la estructura del llamador (`c->` accede a campos a través de un puntero).
+@@ 179-183
+Copia la suma del FVR si se usa (`USAR_FVR`); si no, entrega 0, que `iq_proc.c` interpreta como "sin lectura del FVR".
+@@ 184-185
+Copia la suma de AVSS (para el autocero) y el número de trama (`*numero =` escribe en la variable del llamador).
+@@ 186-188
+Avanza el índice de lectura de forma circular.
+@@ 189-190
+Una trama menos en la cola.
+@@ 191-193
+Rehabilita las interrupciones y devuelve si había trama.
+@@ 195-203
+`adq_tramas_perdidas()`: lee el contador de perdidas dentro de una sección crítica. Es necesario porque es de 32 bits y el PIC de 8 bits lo lee en 4 instrucciones: si la interrupción lo cambiara a mitad de la lectura, se obtendría un valor mezclado.
+@@ 205-209
+`adq_pedir_captura()`: si ya hay una captura (pedida, en curso o sin liberar), la rechaza devolviendo `false`.
+@@ 210-215
+Guarda el buffer, el número de conversiones y el índice inicial, y pasa al estado `CAP_PEDIDA`. El estado se escribe el último, para que cuando la interrupción lo vea el resto ya esté preparado; la captura arrancará en la siguiente trama (`fin_de_trama`).
+@@ 217-220
+`adq_captura_lista()`: devuelve si el buffer ya está lleno.
+@@ 222-227
+`adq_liberar_captura()`: si estaba lista, vuelve al estado sin captura. Lo llama `comunicacion.c` después de enviar la última línea.
+@@ 229-232
+`adq_capturando()`: devuelve si hay una captura en cualquier estado distinto de "nada".

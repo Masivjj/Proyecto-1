@@ -1,0 +1,55 @@
+# resumen: Los bits de configuración del PIC (palabras CONFIG1 a CONFIG5), que se graban junto con el programa y fijan el comportamiento del chip desde el encendido: oscilador, reset, perro guardián, protecciones y programación. El tipo de oscilador externo depende de la opción RELOJ.
+@@ 1-11
+Cabecera. Resume la configuración: HFINTOSC a 32 MHz desde el arranque, MCLR activo (el pin 4 es reset), reset por baja tensión (BOR) a 2.45 V, perro guardián (WDT) desactivado y programación en baja tensión (LVP).
+@@ 13-18
+El campo FEXTOSC depende de la opción `RELOJ`: OFF con reloj interno, XT (o HS con `CRISTAL_HS=1`) con el cristal (la hoja de datos da XT hasta 4 MHz, parámetro OS8) y ECM (hasta 4 MHz, OS3) con el oscilador. El PIC arranca siempre con el HFINTOSC y `reloj.c` pasa al externo. Si se regenera con MCC hay que volver a poner este `#if`.
+@@ 20
+Incluye `device_config.h`, que trae `app_config.h` con la opción `RELOJ` (sin él, los `#if` de abajo no la verían).
+@@ 22
+Comentario de MCC.
+@@ 24
+Palabra de configuración 1: el oscilador.
+@@ 25-35
+**FEXTOSC**, el modo del oscilador externo. Con cristal: **XT** (ganancia media del amplificador inversor interno, para cristales de hasta 4 MHz) o **HS** (ganancia alta). Con módulo oscilador: **ECM** (*External Clock, Medium power*: entrada de reloj CMOS por CLKIN, hasta 4 MHz en este modo). Con reloj interno: **OFF**, y RA4/RA5 quedan como pines normales. `#pragma config` es la directiva de XC8 que escribe los bits de configuración en el archivo `.hex`.
+@@ 36
+**RSTOSC = HFINT32**: al encender, el reloj es el HFINTOSC a 32 MHz. También con reloj externo: así el PIC siempre arranca, haya cristal o no, y el cambio lo hace el software.
+@@ 37
+**CLKOUTEN = OFF**: no se saca FOSC/4 por el pin OSC2 (RA4); queda como E/S o, con cristal, para el oscilador.
+@@ 38
+**CSWEN = ON**: permite cambiar la fuente de reloj desde el software (escribir NOSC y NDIV). Lo necesitan `mcc.c` y `reloj.c`.
+@@ 39
+**FCMEN = ON**: activa el monitor de fallos del reloj (FSCM): si el reloj externo se para, el PIC no se queda colgado sino que pasa a un reloj interno y avisa con OSFIF.
+@@ 41
+Palabra de configuración 2: reset y protecciones.
+@@ 42
+**MCLRE = ON**: el pin 4 (RA3) funciona como reset externo (MCLR), con la resistencia de 10 kΩ a VDD.
+@@ 43
+**PWRTS = OFF**: sin temporizador de encendido (*Power-up Timer*). No hace falta porque el BOR mantiene el reset hasta que VDD es suficiente.
+@@ 44
+**LPBOREN = OFF**: sin el BOR de bajo consumo.
+@@ 45
+**BOREN = ON**: reset por baja tensión (*Brown-out Reset*) siempre activo: si VDD baja del umbral, el PIC se mantiene en reset en lugar de ejecutar instrucciones de forma errónea.
+@@ 46
+**BORV = LO**: umbral del BOR en 2.45 V. La VDD viene de la celda de litio de la tarjeta (3.0-4.2 V), muy por encima. Nota: la hoja de datos pide VDD ≥ 2.5 V para funcionar a más de 16 MHz (parámetro D002), así que entre 2.45 y 2.5 V el modo de 32 MHz estaría fuera de especificación; con una celda de litio no se llega a esa zona.
+@@ 47
+**ZCD = OFF**: detector de paso por cero desactivado (no se usa).
+@@ 48
+**PPS1WAY = ON**: el bloqueo de la selección de pines periféricos (PPSLOCK) solo puede activarse y desactivarse una vez. El código no lo bloquea, así que `adquisicion.c` puede asignar RA1 al PWM6 después de MCC.
+@@ 49
+**STVREN = ON**: un desbordamiento de la pila de hardware (16 niveles de llamadas en el PIC16) provoca un reset en lugar de un comportamiento impredecible.
+@@ 51
+Palabra de configuración 3: el perro guardián (WDT).
+@@ 52-55
+El WDT está **desactivado** (WDTE = OFF) y su periodo, ventana y reloj quedan bajo control del software (no se usan). No se usa porque el lazo principal no tiene esperas que puedan colgarse indefinidamente; sería una mejora posible para un equipo de campo.
+@@ 57
+Palabra de configuración 4: memoria y programación.
+@@ 58-60
+Bloque de arranque (*boot block*) y área de almacenamiento (SAF) desactivados: no hay *bootloader*; se programa con el PICkit.
+@@ 61-65
+Sin protección contra escritura de la aplicación, del bloque de arranque, de la configuración, de la EEPROM de datos ni del SAF. **WRTD = OFF** es necesario para que `ajustes.c` pueda grabar la EEPROM.
+@@ 66
+**LVP = ON**: programación en baja tensión, sin los 8-9 V en MCLR. La necesita el MPLAB Snap. Con LVP activo, RA3 es siempre MCLR.
+@@ 68
+Palabra de configuración 5.
+@@ 69
+**CP = OFF**: sin protección de lectura del código (se puede leer el programa grabado con el programador).

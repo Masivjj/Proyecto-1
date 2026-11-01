@@ -1,0 +1,25 @@
+# resumen: La única rutina de interrupción del programa. El PIC16 tiene un solo vector de interrupción, así que esta función mira qué periférico la pidió y llama a su manejador, con prioridad para el fallo del reloj y después para el ADC.
+@@ 1-15
+Cabecera. Atiende el ADC (fin de cada conversión, cada 100 µs) y la EUSART1 (transmisión y recepción con buffer) y, con reloj externo, antes que nada el fallo del oscilador (OSFIF): el FSCM deja el PIC a 1 MHz y `app/reloj.c` lo devuelve a 16 MHz.
+@@ 17-18
+Incluye las macros de interrupciones y `mcc.h` (registros, drivers, `RELOJ`).
+@@ 19-21
+Con reloj externo incluye `reloj.h` para poder llamar a `reloj_fallo_isr()`.
+@@ 23-24
+`INTERRUPT_InterruptManager()`: la palabra clave `__interrupt()` de XC8 la convierte en la rutina de servicio de interrupción: el compilador la coloca en el vector de interrupción (dirección 0x0004) y la termina con la instrucción `RETFIE`. En el PIC16 mejorado el hardware guarda automáticamente el contexto (W, STATUS, BSR, FSR, PCLATH) en registros sombra al entrar y lo restaura al salir.
+@@ 25
+Comentario de MCC.
+@@ 26-27
+Solo atiende periféricos si PEIE está habilitado (todas las fuentes del proyecto son periféricos).
+@@ 28-34
+**Prioridad 1, solo con reloj externo**: si la interrupción de fallo del oscilador está habilitada y su indicador activo, llama a `reloj_fallo_isr()`, que devuelve el reloj a 16 MHz. Va primero porque, mientras el PIC esté a 1 MHz, todo lo demás va 16 veces más lento. El `else` de la línea 33 enlaza con el `if` siguiente.
+@@ 35-38
+**Prioridad 2: el ADC.** Si la interrupción del ADC está habilitada (ADIE) y ha terminado una conversión (ADIF), llama a `ADCC_ISR()` de MCC, que borra ADIF y llama a `al_terminar_conversion()` de `adquisicion.c`. Va antes que la UART porque tiene que elegir el canal de la siguiente conversión antes del próximo disparo.
+@@ 39-42
+**Prioridad 3: transmisión de la UART.** Si el registro de transmisión está libre (TX1IF) y hay interrupción de transmisión habilitada (TX1IE, solo mientras hay datos en el buffer), envía el siguiente carácter.
+@@ 43-46
+**Prioridad 4: recepción de la UART.** Si ha llegado un carácter (RC1IF), lo guarda en el buffer de recepción.
+@@ 47-51
+Cualquier otra combinación: nada. Se atiende **una sola fuente por entrada**; si había varias pendientes, al salir (`RETFIE`) la interrupción vuelve a entrar en el acto y atiende la siguiente.
+@@ 52-56
+Si PEIE no estaba habilitado, nada. Fin de la rutina de interrupción.

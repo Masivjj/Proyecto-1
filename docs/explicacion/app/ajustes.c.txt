@@ -1,0 +1,78 @@
+# resumen: Guarda y recupera la calibración en la EEPROM con un formato de 17 bytes protegido por marca, versión y suma de control. La escritura no bloquea: se graba un byte por trama, solo los que cambiaron, mientras el muestreo sigue.
+@@ 1-3
+Cabecera: guarda I0, Q0, θ, G y las etapas activas para conservarlos al apagar. Es opcional (sección 10.8 de la especificación) y se controla con `USAR_EEPROM`.
+@@ 4-14
+El formato en la EEPROM, 17 bytes a partir de la dirección 0xF000 (donde empieza la EEPROM de datos del PIC16F18426, 256 bytes de 0xF000 a 0xF0FF según el mapa de memoria de la hoja de datos):
+
+- byte 0: la marca `'P'`, para reconocer que la EEPROM tiene datos de este programa;
+- byte 1: la versión del formato;
+- bytes 2-5, 6-9 y 10-13: I0, Q0 (mV) y θ (grados), cada uno un `float` de 4 bytes;
+- byte 14: la ganancia G;
+- byte 15: las etapas activas (máscara de 5 bits; el comentario lista cuatro, pero también se guarda el autocero, bit 4);
+- byte 16: complemento a 1 de la suma de los bytes 0-15, para detectar datos corruptos.
+@@ 15-22
+Por qué la escritura no bloquea: grabar un byte tarda 4-5 ms (parámetro MEM24 de la hoja de datos), pero la CPU sigue ejecutando mientras tanto (sección 6.4.3). `ajustes_tarea()` lanza como mucho un byte por llamada y solo los que cambiaron, así que nunca se detiene el lazo de 10 ms. La suma de control se escribe la última: si se corta la alimentación a mitad de una grabación, al arrancar la suma no coincide y se usan los valores por defecto en vez de datos a medio escribir. Los datos de la versión 1 del formato (donde el byte 15 era la corrección de signo) también se descartan. Además, solo reescribir los bytes que cambian alarga la vida de la EEPROM (100 000 ciclos por byte, parámetro MEM20).
+@@ 23-26
+`string.h` aporta `memcpy`; `mcc.h` los registros y la función de lectura de MCC; y las cabeceras propia y del procesamiento.
+@@ 28-32
+Constantes del formato: dirección base 0xF000, marca 0x50 (código ASCII de `'P'`), versión 2, tamaño 17 bytes y posición de la suma de control (16).
+@@ 34
+Todo lo que sigue solo se compila si `USAR_EEPROM` vale 1.
+@@ 36-38
+`imagen`: copia en RAM de lo que debería contener la EEPROM. `pendiente`: hay bytes por grabar. `escribiendo`: hay una grabación en curso.
+@@ 40-48
+`suma_control()`: suma los bytes (en 8 bits, descartando el acarreo: el *cast* `(uint8_t)` hace la suma módulo 256) y devuelve el complemento a 1 (`~`, invierte todos los bits). Con el complemento, una EEPROM borrada (todo 0xFF) no da una suma válida por casualidad.
+@@ 50-54
+`float_razonable()`: rechaza NaN (`x == x` es falso solo para NaN), infinitos y valores fuera de ±límite. Protege de datos que pasaran la suma de control por casualidad.
+@@ 56-59
+`iniciar_escritura()`: hace lo mismo que `DATAEE_WriteByte()` de MCC pero sin quedarse esperando a que termine. Guarda el estado actual de GIE para restaurarlo después.
+@@ 61-63
+Dirección de 16 bits en NVMADRH:NVMADRL (parte alta y baja) y el dato en NVMDATL.
+@@ 64-65
+`NVMREGS` = 1 selecciona el espacio de la EEPROM/configuración (en lugar de la Flash de programa) y `WREN` = 1 habilita la escritura.
+@@ 66-69
+**Secuencia de desbloqueo** obligatoria (sección 6.4.2 de la hoja de datos): escribir 0x55 y después 0xAA en NVMCON2 y, en la instrucción siguiente, poner WR = 1. Es una protección del hardware contra escrituras accidentales. Debe ejecutarse sin interrupciones en medio, por eso se deshabilitan antes (GIE = 0).
+@@ 70-72
+Restaura GIE como estaba y anota que hay una grabación en curso. A partir de aquí el hardware graba el byte solo, en 4-5 ms, y pone WR = 0 al terminar.
+@@ 74-77
+`ajustes_cargar()`: `i` para el bucle y tres `float` temporales para la calibración.
+@@ 79-81
+Lee los 17 bytes de la EEPROM con la función de MCC `DATAEE_ReadByte` y los guarda en la imagen.
+@@ 82-85
+Comprueba marca, versión y suma de control; si algo falla, la EEPROM está vacía, es de otra versión o está corrupta: devuelve `false` y se quedan los valores por defecto.
+@@ 86-88
+Copia los bytes a los `float` con `memcpy`. Se usa `memcpy` en lugar de convertir punteros (`*(float *)&imagen[2]`) porque es la forma correcta en C de reinterpretar bytes sin problemas de alineación ni de las reglas de *aliasing*.
+@@ 89-92
+Valida los valores: el cero dentro de ±100 000 mV, θ dentro de ±180° y la máscara de etapas sin bits fuera de los 5 válidos. Una línea C larga puede ocupar varias líneas de texto.
+@@ 93-95
+Aplica la ganancia; si no es 2, 11 ni 101, descarta todo.
+@@ 96-99
+Aplica las etapas y la calibración (θ recalcula su coseno y seno) y devuelve `true`.
+@@ 101-105
+`ajustes_guardar()`: lee la calibración actual del procesamiento.
+@@ 106-112
+Construye la imagen: marca, versión, los tres `float` copiados byte a byte, ganancia y etapas.
+@@ 113-115
+Calcula la suma de control de los 16 primeros bytes y marca que hay algo pendiente. No toca la EEPROM: eso lo hará `ajustes_tarea()` poco a poco.
+@@ 117-119
+`ajustes_tarea()`: se llama cada 10 ms desde `main.c`.
+@@ 121-123
+Si el hardware sigue grabando el byte anterior (WR = 1), no hace nada y vuelve: no se puede empezar otra escritura todavía.
+@@ 124-127
+Si acaba de terminar una grabación, quita el permiso de escritura (WREN = 0), como recomienda la hoja de datos, para que una escritura accidental no pueda producirse.
+@@ 128-130
+Si no hay nada pendiente, vuelve.
+@@ 131-136
+Busca el primer byte de la EEPROM que no coincide con la imagen y lanza su grabación; vuelve enseguida. En las llamadas siguientes continuará con el siguiente byte distinto. Como el bucle va del 0 al 16, la suma de control (byte 16) es siempre la última en grabarse.
+@@ 137-138
+Si todos coinciden, la EEPROM ya está al día: no queda nada pendiente.
+@@ 140
+Versión sin EEPROM (`USAR_EEPROM` = 0): siempre se arranca con los valores por defecto.
+@@ 142-145
+`ajustes_cargar()` siempre devuelve `false`.
+@@ 147-149
+`ajustes_guardar()` no hace nada.
+@@ 151-153
+`ajustes_tarea()` no hace nada.
+@@ 155
+Fin del `#if` de la línea 34.

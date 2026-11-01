@@ -1,0 +1,31 @@
+# resumen: Configura todos los pines al arrancar: valor inicial de las salidas, dirección, modo analógico o digital, pull-ups, tipo de salida, pendiente de los flancos, umbral de entrada y la asignación de la UART a RC4/RC5 mediante PPS.
+@@ 1-14
+Cabecera. Resume la configuración: RC0-RC3 analógicos (las cuatro señales de la tarjeta), RC4 = TX y RC5 = RX de la UART asignados con PPS, RA2 y RA4 entradas digitales con pull-up (pulsadores), RA5 salida (LED) y RA0/RA1 sin uso (analógicos). Con reloj externo cambian RA0, RA1, RA4 y RA5 (tabla de `pin_manager.h`).
+@@ 16
+Incluye `pin_manager.h`, que define los valores `PINES_x` según el reloj.
+@@ 19-20
+`PIN_MANAGER_Initialize()`.
+@@ 21-25
+**LAT** (latch de salida) de los puertos A y C a 0: cualquier pin que se configure como salida empieza en nivel bajo (el LED apagado).
+@@ 27-31
+**TRIS** (dirección; 1 = entrada). Puerto A según el reloj (0x1F con el interno: solo RA5, el LED, es salida). Puerto C = 0x2F (binario 10 1111): RC0-RC3 entradas (las analógicas), RC4 salida (TX de la UART) y RC5 entrada (RX).
+@@ 33-37
+**ANSEL** (1 = analógico). Puerto C = 0x0F: RC0-RC3 analógicos, para el ADC; RC4 y RC5 digitales, para la UART. Un pin analógico desconecta su buffer de entrada digital, que de otro modo consumiría corriente con tensiones intermedias. Puerto A según el reloj.
+@@ 39-43
+**WPU** (pull-ups débiles internos, del orden de 100 µA según el parámetro D350). Puerto A según el reloj (RA2 y RA4 con el interno, para los pulsadores). Puerto C sin pull-ups: no deben cargar las entradas analógicas.
+@@ 45-49
+**ODCON** = 0: todas las salidas en push-pull (llevan el pin activamente a 0 y a VDD), no en drenador abierto.
+@@ 51-55
+**SLRCON**: limitación de la pendiente de los flancos de salida (1 = limitada), que reduce el ruido electromagnético. Activada en todos los pines (en RA3, solo entrada, no aplica). `adquisicion.c` la quita en RA1 cuando saca el disparo del PWM6, para medir flancos limpios.
+@@ 57-60
+**INLVL**: umbral de las entradas digitales. Puerto A = 0x3F: todos con disparador Schmitt (ST), que da histéresis y rechaza ruido, adecuado para pulsadores.
+@@ 61-65
+Puerto C = 0x1F: RC5 (la entrada RX de la UART) con **umbral TTL** y el resto ST. Motivo (parámetros D321 y D322 de la hoja de datos): con ST, un 1 exige 0.8 × VDD, que con la celda de litio cargada (VDD = 4.2 V) son 3.36 V, y un adaptador USB-serie de 3.3 V no llegaría; con TTL basta 0.25 × VDD + 0.8 V = 1.85 V. La hoja de datos (sección 14.4.5) pide cambiar el umbral con los periféricos parados, por eso se hace aquí, antes de inicializar la EUSART. El umbral INLVL también se aplica a las entradas de periféricos asignadas por PPS (nota 4 de la tabla de asignación de pines).
+@@ 68
+**PPS de entrada**: la entrada RX de la EUSART1 se toma del pin RC5. El código 0x15 = binario 010 101: puerto C (010), bit 5 (101).
+@@ 69
+**PPS de salida**: el pin RC4 saca la señal TX1 de la EUSART1 (código 0x0F, tabla 16-3 de la hoja de datos). PPS (*Peripheral Pin Select*) permite asignar casi cualquier periférico digital a casi cualquier pin.
+@@ 70
+Fin de `PIN_MANAGER_Initialize()`.
+@@ 72-74
+`PIN_MANAGER_IOC()`: vacía, porque no se usa la interrupción por cambio de nivel en los pines.

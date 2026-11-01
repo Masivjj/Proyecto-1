@@ -6,8 +6,8 @@
     Temporizador TMR2: base de tiempo del PWM6 que dispara el ADC.
 
   @Description
-    Reloj FOSC/4 = 8 MHz, prescaler 1:4, periodo T2PR = 199 (200 cuentas):
-    4 * 200 / 8 MHz = 100.000 us exactos. Postscaler 1:1 y sin interrupcion:
+    Reloj FOSC/4, T2PR = 199 (200 cuentas), prescaler 1:4 a 32 MHz (8 MHz / 4)
+    o 1:2 a 16 MHz (4 MHz / 2): 100.000 us exactos. Postscaler 1:1, sin interrupcion:
     el TMR2 solo marca el periodo del PWM6, cuyo flanco de subida arranca
     cada conversion del ADC (ADACT = PWM6_out).
     Equivalente a lo que genera MCC Classic con docs/configuracion_MCC_Classic.md.

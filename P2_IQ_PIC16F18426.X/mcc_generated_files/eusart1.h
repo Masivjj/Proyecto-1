@@ -6,8 +6,8 @@
     EUSART1 asincrona a 115200 baudios con buffers por interrupcion.
 
   @Description
-    8N1, BRG16 = 1, BRGH = 1, SP1BRG = 68: 32 MHz / (4 * 69) = 115942 baudios
-    (error +0.6 %). TX en RC4 y RX en RC5 (PPS). Buffer de transmision de 128
+    8N1, BRG16 = 1, BRGH = 1: SP1BRG = 68 a 32 MHz (115942 baudios, +0.6 %) o
+    34 a 16 MHz (114286, -0.8 %). TX en RC4 y RX en RC5 (PPS). Buffer de transmision de 128
     bytes y de recepcion de 8 bytes.
     Equivalente a lo que genera MCC Classic con docs/configuracion_MCC_Classic.md.
 */

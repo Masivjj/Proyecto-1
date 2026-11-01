@@ -1,0 +1,19 @@
+# resumen: Interfaz del módulo de reloj: los tres estados posibles (interno, externo funcionando, reserva tras un fallo) y las funciones para arrancar el reloj externo, atender su fallo en la interrupción y consultarlo desde el lazo.
+@@ 1-4
+Cabecera: el reloj del sistema es el HFINTOSC interno o un reloj externo de 4 MHz con PLL ×4, según la opción `RELOJ`.
+@@ 5-6
+Guarda de inclusión.
+@@ 8-9
+`bool` y enteros de tamaño fijo.
+@@ 11-15
+Los tres estados del reloj, como `enum` (valen 0, 1 y 2): `RELOJ_EST_INTERNO` (compilado para reloj interno: HFINTOSC a 32 MHz), `RELOJ_EST_EXTERNO` (el externo de 4 MHz funciona: 16 MHz con el PLL) y `RELOJ_EST_RESERVA` (el externo no arrancó o falló: HFINTOSC a 16 MHz).
+@@ 17-21
+`reloj_inicializar()`: con reloj externo pide el paso del HFINTOSC (16 MHz) al externo con PLL ×4 y espera hasta 100 ms a que arranque; si no lo hace, se queda con el HFINTOSC. Se llama justo después de `SYSTEM_Initialize()` y con las interrupciones aún deshabilitadas. Con reloj interno no hace nada.
+@@ 23-27
+`reloj_fallo_isr()`: la llama la interrupción de fallo del oscilador (OSFIF) en `interrupt_manager.c`. El monitor de fallos (FSCM) ya ha pasado el sistema al HFINTOSC a 1 MHz; esta función lo devuelve a 16 MHz. Solo existe con reloj externo.
+@@ 29-31
+`reloj_tarea()`: para el lazo principal; devuelve `true` una sola vez después de un fallo en marcha, para que se avise por la UART (no se puede enviar texto desde la interrupción).
+@@ 33
+`reloj_estado()`: el estado actual (uno de los `RELOJ_EST_x`).
+@@ 35
+Cierre de la guarda de inclusión.

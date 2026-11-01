@@ -14,6 +14,8 @@ La especificación de partida está en [`docs/P2_IQ_procesamiento_para_PIC16F184
 
 **Avance separado: solo el ADC a 1000 muestras/s.** El proyecto [`ADC_1kSPS_PIC16F18426.X`](ADC_1kSPS_PIC16F18426.X) muestrea una señal de un generador en RC0, disparada por el PWM6 cada 1 ms, y envía cada muestra por la UART. [`pc/adc_1ksps.py`](pc/adc_1ksps.py) la dibuja con su espectro, SNR y ENOB. Guía de montaje y presentación: [`docs/avance_adc_1ksps.md`](docs/avance_adc_1ksps.md).
 
+**Código explicado línea a línea** (para estudiarlo o sustentarlo): [`docs/codigo_explicado.html`](docs/codigo_explicado.html), generado con `python3 docs/explicacion/generar.py` a partir de las explicaciones de `docs/explicacion/`. El generador falla si alguna línea con contenido queda sin explicar y avisa si el código cambió desde que se explicó.
+
 **Reloj externo de 4 MHz (opcional):** el firmware completo funciona con el oscilador interno (32 MHz, por defecto) o con un cristal u oscilador de cuarzo de 4 MHz y el PLL ×4 (16 MHz), que se elige al compilar con la opción `RELOJ` o con las configuraciones `cristal_4MHz` y `oscilador_4MHz` de MPLAB X. Si el reloj externo falta o se para, sigue con el oscilador interno a 16 MHz y lo avisa. Conexiones, pines que cambian y registros: [`docs/reloj_externo_4MHz.md`](docs/reloj_externo_4MHz.md).
 
 **Prueba en la placa con LabVIEW y una NI USB-6211** (los dos proyectos): AO 0 como generador, AI 0 como referencia y un contador en RA1 miden la frecuencia de muestreo real, la amplitud y el SNR. Diagrama de bloques del VI en [`docs/pruebas_labview_usb6211.md`](docs/pruebas_labview_usb6211.md); lo mismo en Python con `nidaqmx` en [`pc/prueba_usb6211.py`](pc/prueba_usb6211.py).

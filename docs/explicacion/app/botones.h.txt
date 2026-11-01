@@ -1,0 +1,11 @@
+# resumen: Interfaz de los dos pulsadores, "Fijar cero" y "Calibrar θ": una sola función que se llama cada 10 ms y devuelve los eventos nuevos.
+@@ 1-3
+Cabecera. Nombra los pulsadores y sus pines con el reloj interno (RA2 y RA4; con el cristal de 4 MHz "Calibrar θ" pasa a RA1, lo resuelve `pin_manager.h`).
+@@ 4-5
+Guarda de inclusión.
+@@ 7
+Enteros de tamaño fijo.
+@@ 9-11
+`botones_tarea()`: debe llamarse cada 10 ms. Devuelve una máscara con los eventos (`IQ_EV_FIJAR_CERO`, `IQ_EV_CALIBRAR`) de los pulsadores que se acaban de pulsar, o 0.
+@@ 13
+Cierre de la guarda de inclusión.

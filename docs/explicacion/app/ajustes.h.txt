@@ -1,0 +1,15 @@
+# resumen: Interfaz del módulo que guarda en la EEPROM interna del PIC la calibración (I0, Q0, θ), la ganancia y las etapas activas, para recuperarlas al encender.
+@@ 1-3
+Cabecera: qué se guarda en la EEPROM.
+@@ 4-5
+Guarda de inclusión.
+@@ 7
+Solo hace falta `bool`.
+@@ 9-11
+`ajustes_cargar()`: lee la EEPROM y, si los datos son válidos, los aplica al procesamiento. Devuelve si se cargaron (lo usa el mensaje de bienvenida).
+@@ 13-15
+`ajustes_guardar()`: toma la configuración y la calibración actuales y las deja pendientes de grabar. No espera a que se graben.
+@@ 17-18
+`ajustes_tarea()`: se llama cada 10 ms y lanza como mucho la escritura de un byte.
+@@ 20
+Cierre de la guarda de inclusión.

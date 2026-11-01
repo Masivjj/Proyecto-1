@@ -1,0 +1,167 @@
+# resumen: Implementa el protocolo de texto por la UART: convierte los resultados en líneas de enteros, interpreta las órdenes de un carácter y reparte en el tiempo los mensajes largos (estado, volcado de la traza, captura) a una línea por trama, para no ocupar más ancho de banda del disponible.
+@@ 1-6
+Cabecera. Todo se envía como enteros (µV, centésimas de grado…) para no usar `printf("%f")`. Calcula el ancho de banda: una línea de muestra (~45 caracteres) cada 10 ms más una de bloque (~65) cada 100 ms son unos 5150 caracteres por segundo, aproximadamente la mitad de lo que permite 115200 baudios (11 520 caracteres/s con 8N1: 10 bits por carácter).
+@@ 7-9
+`EUSART1_Write()` solo detiene el programa si el buffer de transmisión de 128 bytes está lleno; mientras haya sitio, guarda el carácter y vuelve, y la interrupción de la UART lo va enviando. Por eso los textos largos se envían de línea en línea, una por trama, para no llenarlo.
+@@ 10-16
+Incluye los drivers de MCC (UART), su propia cabecera y los módulos con los que habla: adquisición (captura), ajustes (EEPROM), formato (números a texto), reloj (estado del reloj) y traza (volcado).
+@@ 18-21
+Factores de escala para pasar los `float` a enteros con unidades pequeñas: mV a µV (×1000), V a mV (×1000), grados a centésimas (×100) y d a milésimas (×1000). Así se conservan decimales sin enviar comas decimales.
+@@ 23
+`ESTADO_LINEAS` = 10: número de líneas del mensaje de estado y ayuda.
+@@ 24
+`CODIGOS_POR_LINEA` = 10: códigos de la captura por línea `M,…` (200 códigos = 20 líneas).
+@@ 26
+`estado_paso`: qué línea del mensaje de estado toca enviar (1-10); 0 = ninguna. Permite repartir el mensaje en varias tramas.
+@@ 27-28
+Estado del volcado de la traza: `volcado_total` puntos a enviar (0 = no hay volcado) y `volcado_n` puntos ya enviados.
+@@ 29-30
+Estado del envío de la captura: puntero al buffer (que es la memoria de la traza prestada) y cuántos códigos se han enviado.
+@@ 32
+Separador: funciones de salida.
+@@ 34-37
+`tx_car()`: envía un carácter con el driver de MCC. El *cast* a `uint8_t` es porque el driver trabaja con bytes sin signo.
+@@ 39-44
+`tx_texto()`: envía una cadena C carácter a carácter hasta el terminador `'\0'`. `*s++` lee el carácter apuntado y luego avanza el puntero.
+@@ 46-51
+`tx_buffer()`: envía `n` caracteres de un buffer que no termina en `'\0'` (los que produce `formato.c`). `n--` usa el valor y luego lo decrementa.
+@@ 53-58
+`tx_u32()`: convierte un entero sin signo de 32 bits a texto decimal en un buffer local (`fmt_u32` devuelve cuántos caracteres escribió) y lo envía.
+@@ 60-65
+`tx_i32()`: lo mismo para enteros con signo (con el `-` delante si es negativo).
+@@ 67-72
+`tx_campo()`: envía `,` seguido del valor `x × escala` redondeado al entero más próximo. Es la pieza con la que se construyen las líneas de muestra y bloque.
+@@ 74-78
+`tx_fin()`: termina la línea con retorno de carro y salto de línea (CR LF), lo que esperan los terminales serie de Windows y el programa del PC.
+@@ 80-87
+`tx_centesimas()`: escribe un número con dos decimales a partir de un entero en centésimas (por ejemplo 300 → "3.00"). Envía la parte entera (`v / 100`), el punto y los dos dígitos decimales (`'0' + dígito` convierte un número 0-9 en su carácter ASCII). Se usa para el offset del ADC.
+@@ 89-95
+`tx_etapa()`: escribe ` nombre=ON` u ` nombre=OFF` según el bit de la etapa esté activo en la máscara actual.
+@@ 97-101
+`tx_configuracion()`: escribe la línea `# G=...` con la configuración actual. Primero lee la calibración (I0, Q0, θ).
+@@ 102-103
+`# G=` y la ganancia.
+@@ 104-108
+El estado de las cinco etapas.
+@@ 109-114
+El cero en µV y θ en centésimas de grado, redondeados a entero.
+@@ 115-116
+Fin de línea y de la función. Ejemplo real: `# G=2 cero=ON theta=ON ganancia=ON norm=ON autocero=ON I0_uV=62277 Q0_uV=21064 theta_cdeg=0`.
+@@ 118-123
+`TEXTO_EXTERNO`: el nombre del reloj externo que se escribirá en los mensajes, según se compile para cristal u oscilador. Se decide en tiempo de compilación con `#if`.
+@@ 124-126
+`tx_reloj()`: escribe la línea `# reloj:` según el estado del módulo de reloj.
+@@ 127-129
+Externo funcionando: `# reloj: cristal de 4 MHz (RA5/RA4) x PLL 4 = 16 MHz` (u oscilador). En C, dos cadenas literales seguidas se concatenan al compilar; así se inserta `TEXTO_EXTERNO`.
+@@ 130-132
+Externo caído o que no arrancó: avisa de que se usa el HFINTOSC de reserva a 16 MHz con ±2 % de exactitud.
+@@ 133-137
+Reloj interno: `# reloj: interno (HFINTOSC) a 32 MHz`.
+@@ 139-142
+`com_aviso_reloj()`: el aviso que se envía una sola vez cuando el reloj externo se para en marcha.
+@@ 144-147
+`tx_linea_estado()`: escribe una de las 10 líneas del mensaje de estado según `paso`. Recibe las muestras perdidas para la línea 5.
+@@ 148-150
+Línea 1: nombre y versión del firmware (`VERSION_FIRMWARE` se concatena al compilar).
+@@ 151-159
+Línea 2: configuración del ADC, construida con las constantes de `app_config.h`: `# ADC: modo basico, disparo PWM6 cada 100 us, 1000 muestras/s por canal, 10 por trama`. Sirve para comprobar en la placa que el firmware muestrea a 1 kS/s.
+@@ 160-162
+Línea 3: la fuente del reloj.
+@@ 163-165
+Línea 4: ganancia, etapas y calibración.
+@@ 166-175
+Línea 5: puntos guardados en la traza, muestras perdidas desde el arranque y offset del ADC medido en AVSS con dos decimales. Ejemplo: `# puntos en traza: 64  muestras perdidas: 0  offset ADC (AVSS): 3.00 LSB`.
+@@ 176-178
+Línea 6: el formato de las líneas de muestra (para quien lee con un terminal).
+@@ 179-181
+Línea 7: el formato de las líneas de bloque.
+@@ 182-187
+Líneas 8 y 9: ayuda con las órdenes.
+@@ 188-192
+Línea 10 (y cualquier otro valor): ayuda con las órdenes de las etapas.
+@@ 194-197
+`com_bienvenida()`: primero dice si la EEPROM tenía ajustes válidos. El operador `? :` elige una de las dos cadenas; la línea 199 continúa la expresión.
+@@ 198-199
+(Continuación) Las dos cadenas posibles.
+@@ 200-203
+Después envía las 10 líneas del estado seguidas, con 0 muestras perdidas. Es el único mensaje largo que se envía de una vez (todavía no hay datos que enviar); por eso `main.c` descuenta las tramas perdidas durante el arranque.
+@@ 205-213
+`com_muestra()`: la línea de muestra: el tiempo en ms y los cuatro valores en µV separados por comas. Ejemplo durante una fisura: `2250,94790,77389,32512,56324`.
+@@ 215-232
+`com_bloque()`: la línea de bloque: `B`, |V|, fase, d, I0, Q0, θ y VCC_A redondeados con su escala, y después la ganancia, las banderas y las etapas como enteros. Ejemplo: `B,65743,1869,16313,0,0,0,3651,2,0,31`: |V| = 65.743 mV, fase 18.69°, d = 16.313 × 10⁻⁴, sin cero ni θ, VCC_A = 3.651 V, G = 2, sin banderas y las 5 etapas activas.
+@@ 234-241
+`tx_fin_orden()`: termina la respuesta a una orden y, si la etapa correspondiente está desactivada, añade ` -> ignorada (etapa desactivada)`.
+@@ 243-253
+`com_eventos_boton()`: anuncia cada pulsación (`# boton: fijar cero`, `# boton: calibrar theta`), indicando si se ignorará.
+@@ 255
+Separador: órdenes recibidas.
+@@ 257-264
+`orden_de_etapa()`: para las órdenes que actúan sobre una etapa (cero o θ): registra el evento en el procesamiento, que lo aplicará al cerrar el bloque (o lo ignorará si la etapa está desactivada), y contesta con el texto de la orden.
+@@ 266-268
+`alternar_etapa()`: activa la etapa si estaba desactivada y viceversa. Guarda las etapas que había antes.
+@@ 270-272
+Invierte el bit con XOR (`^`) y pide el cambio. Si el bit resultante es igual al de antes, el procesamiento lo rechazó: solo pasa al intentar desactivar la normalización sin FVR, y se avisa.
+@@ 273-275
+Guarda las etapas en la EEPROM (para que se mantengan al reiniciar) y contesta con la configuración actualizada.
+@@ 277-282
+`cambiar_ganancia()`: fija la ganancia (el `(void)` indica que se ignora a propósito el resultado: desde aquí solo llegan 2, 11 y 101, siempre válidos), la guarda en la EEPROM y contesta con la configuración.
+@@ 284-287
+`iniciar_volcado()` (orden `p`): anota cuántos puntos hay en la traza y empieza por el primero.
+@@ 288-290
+Cabecera del volcado: `# traza: 64 puntos P,I1_uV,Q1_uV del mas antiguo al mas reciente`.
+@@ 291-294
+Si la traza está vacía, termina en el acto con `# fin traza`.
+@@ 296-298
+`volcar_punto()`: envía un punto de la traza; se llama una vez por trama.
+@@ 300-305
+Lee el punto `volcado_n` (0 = el más antiguo) y, si existe, envía `P,I′,Q′` en µV y pasa al siguiente.
+@@ 306-308
+Si el punto ya no existe es que la traza se borró durante el volcado: se da por terminado.
+@@ 309-313
+Al enviar el último punto, termina el volcado con `# fin traza`. 64 puntos a uno por trama tardan 0.64 s.
+@@ 315-319
+`iniciar_captura()` (orden `m`): captura 200 conversiones seguidas de I_OUT, una por ronda (cada 1 ms), para medir el SNR y el jitter con `pc/medir_jitter.py`. Las tramas normales siguen mientras tanto.
+@@ 320-323
+Si ya hay una captura o un volcado en curso, pide esperar y no hace nada (comparten la memoria de la traza).
+@@ 324
+Toma prestada la memoria de la traza como buffer de 200 valores de 16 bits (400 bytes, caben en los 512 de la traza). Esto vacía la traza.
+@@ 325-326
+Empieza a contar los enviados y pide la captura al módulo de adquisición, que la arrancará en la trama siguiente. Se ignora el resultado porque ya se comprobó que no había otra captura.
+@@ 327-332
+Cabecera de la captura: `# m: captura de 200 conversiones de I_OUT, una cada 1000 us`. El programa del PC lee el periodo de esta línea.
+@@ 334-338
+`enviar_captura()`: envía una línea `M,` con hasta 10 códigos; se llama una vez por trama cuando la captura está lista.
+@@ 339-344
+`M` y los códigos separados por comas, hasta 10 o hasta acabar los 200.
+@@ 345-350
+Al enviar el último: libera la captura, vacía la traza (cuya memoria contenía los códigos, no puntos) y envía `# fin captura`.
+@@ 352-354
+`atender_orden()`: ejecuta una orden de un carácter con un `switch`.
+@@ 355-366
+`z`, `x`, `c` y `t`: órdenes de las etapas de cero y θ (fijar cero, borrar cero, calibrar θ, θ = 0).
+@@ 367-370
+`b`: borrar la traza. Se hace como evento, al cerrar el bloque, para no borrarla a mitad de un volcado.
+@@ 371-379
+`2`, `1` y `0`: ganancia ×2, ×11 y ×101 (deben coincidir con los jumpers JP701/JP702 de la tarjeta).
+@@ 380-394
+`Z`, `T`, `G`, `N` y `A`: alternar las etapas de cero, θ, ganancia, normalización y autocero.
+@@ 395-401
+`p`: volcar la traza, salvo que haya una captura (la memoria de la traza está ocupada) o ya haya un volcado en curso.
+@@ 402-404
+`m`: captura para medir el jitter.
+@@ 405-408
+`?` o `h`: empieza a enviar el mensaje de estado desde la línea 1 (una línea por trama, 100 ms en total). Dos `case` seguidos sin `break` comparten código.
+@@ 409-412
+Los caracteres de fin de línea y el espacio se ignoran sin responder (los envían muchos terminales al pulsar Intro).
+@@ 413-417
+Cualquier otro carácter: `# orden desconocida (? = ayuda)`.
+@@ 419-423
+`com_tarea()`: primero procesa **todos** los caracteres recibidos desde la última trama. `EUSART1_is_rx_ready()` dice si hay alguno en el buffer de recepción (que llena la interrupción de la UART) y `EUSART1_Read()` lo saca.
+@@ 424-426
+Si hay un mensaje de estado en curso, envía su siguiente línea y avanza; tras la décima vuelve a 0.
+@@ 427-428
+Si no, y hay un volcado de traza en curso, envía el siguiente punto.
+@@ 429-432
+Si no, y hay una captura lista, envía la siguiente línea `M`. Solo se hace una de las tres cosas por trama: así el tráfico extra queda acotado a una línea por cada 10 ms, además de la muestra.
+@@ 434-437
+`com_volcando_traza()`: indica si hay un volcado en curso.

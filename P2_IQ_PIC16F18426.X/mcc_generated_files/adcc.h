@@ -11,7 +11,7 @@
       - Modo basico (MD = 000): una conversion por disparo
       - Disparo de autoconversion: PWM6_out (ADACT = 0x0E), cada 100 us
       - Referencia VDD / VSS, resultado justificado a la derecha
-      - Reloj FOSC/32 -> TAD = 1.0 us a 32 MHz, sincrono con FOSC (no FRC)
+      - Reloj FOSC/32 (32 MHz) o FOSC/16 (16 MHz): TAD = 1.0 us, sincrono con FOSC
       - Adquisicion: 8 TAD (8 us); sin precarga
       - Interrupcion ADIF al terminar cada conversion; la aplicacion instala
         su funcion con ADCC_SetADIInterruptHandler()

@@ -6,8 +6,8 @@
     PWM6: disparo por hardware de las conversiones del ADC.
 
   @Description
-    Ver pwm6.h. Periodo = (T2PR + 1) * 4 * TOSC * prescaler = 200 * 4 *
-    31.25 ns * 4 = 100 us. Ciclo de trabajo = PWM6DC / (4 * (T2PR + 1)) =
+    Ver pwm6.h. Periodo = (T2PR + 1) * 4 * TOSC * prescaler = 200 * 4 * 31.25 ns
+    * 4 (32 MHz) o 200 * 4 * 62.5 ns * 2 (16 MHz) = 100 us. Ciclo de trabajo = PWM6DC / (4 * (T2PR + 1)) =
     400 / 800 = 50 %. Equivalente a lo que genera MCC Classic con
     docs/configuracion_MCC_Classic.md.
 */

@@ -1,0 +1,19 @@
+# resumen: Interfaz de la traza del plano polar (paso P9): un buffer con los últimos 64 puntos (I′, Q′), que también presta su memoria a la captura de la orden m.
+@@ 1-3
+Cabecera: traza del plano polar (P9), los últimos `N_TRAZA` puntos (I′, Q′).
+@@ 4-5
+Guarda de inclusión.
+@@ 7-9
+`bool`, enteros de tamaño fijo y `app_config.h` (para `N_TRAZA` y `N_CAPTURA`).
+@@ 11
+`traza_agregar()`: añade un punto (sustituye al más antiguo cuando está llena).
+@@ 12
+`traza_borrar()`: la vacía.
+@@ 13
+`traza_puntos()`: cuántos puntos tiene ahora (como el indicador "puntos actuales" del VI).
+@@ 14
+`traza_leer(n, ...)`: lee el punto `n`, con 0 = el más antiguo; devuelve `false` si no existe.
+@@ 16-19
+`traza_prestar_memoria()`: la captura de la orden `m` usa la misma memoria que la traza. La función vacía la traza y devuelve un puntero a un buffer de 200 valores de 16 bits. Mientras se use no se debe llamar a `traza_agregar()` (por eso `main.c` comprueba `adq_capturando()`).
+@@ 21
+Cierre de la guarda de inclusión.

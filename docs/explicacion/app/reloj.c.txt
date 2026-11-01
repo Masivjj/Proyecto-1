@@ -1,0 +1,65 @@
+# resumen: Gestiona la opción de reloj externo de 4 MHz: al arrancar pide el cambio del oscilador interno al externo con PLL ×4 y, si no arranca, se queda con el interno a la misma frecuencia; si el externo se para después, la interrupción del monitor de fallos devuelve el PIC a 16 MHz en microsegundos. Con el reloj interno casi todo el archivo se compila vacío.
+@@ 1-3
+Cabecera: paso al reloj externo de 4 MHz (cristal u oscilador) con PLL ×4 y reserva con el HFINTOSC.
+@@ 4-12
+Cómo arranca. Los bits de configuración hacen que el PIC arranque siempre con el oscilador interno (RSTOSC = HFINT32), y FEXTOSC deja preparado el oscilador externo (XT o HS para el cristal, ECM para el oscilador). `OSCILLATOR_Initialize()` de MCC pone el HFINTOSC a 16 MHz (registro OSCFRQ) y los periféricos (TMR2, ADC, EUSART) ya están configurados para 16 MHz. Aquí se pide el cambio al externo (sección "Clock Switching" de la hoja de datos): el HFINTOSC sigue moviendo el PIC hasta que el externo ha superado el temporizador de arranque (OST: 1024 oscilaciones, que garantizan que el cristal oscila estable) y el PLL se ha enganchado; entonces el cambio se hace solo (CSWHOLD = 0) y el campo COSC lo refleja.
+@@ 13-16
+Por qué la reserva es transparente: el externo ×4 y el HFINTOSC de reserva dan los mismos 16 MHz, así que no hay que reconfigurar ningún periférico. Si el externo no está, el firmware funciona igual, solo que con la exactitud del HFINTOSC (±2 %) en vez de la del cristal.
+@@ 17-24
+El caso del fallo en marcha. Según la hoja de datos (8.4.2), cuando el monitor de fallos (FSCM) detecta que el externo se paró, pasa el sistema al HFINTOSC **a 1 MHz** y activa OSFIF. A 1 MHz todo iría 16 veces más lento (disparos del ADC cada 1.6 ms, UART a ~7200 baudios), así que el fallo se atiende en la interrupción, que vuelve a 16 MHz en microsegundos. Escribir NOSC/NDIV despeja la condición de fallo (8.4.3).
+@@ 25-27
+`mcc.h` (registros y `__delay_us`), `app_config.h` (la opción `RELOJ`, incluida directamente para que nunca falte aunque `mcc.h` cambie) y la cabecera propia.
+@@ 29
+`OSCCON1_HFINTOSC` = 0x60: en OSCCON1, NOSC = 110 (HFINTOSC a la frecuencia de OSCFRQ) y NDIV = 0000 (sin división). Comprobado en la tabla 8-1 de la hoja de datos.
+@@ 30
+`OSCFRQ_16MHZ` = 0x05: HFFRQ = 101, 16 MHz (tabla del registro OSCFRQ).
+@@ 31
+`OSCCON1_EXT_PLL4X` = 0x20: NOSC = 010 (oscilador externo con PLL ×4), NDIV = 1:1.
+@@ 32
+`COSC_EXT_PLL4X` = 2: el valor que muestra COSC (fuente actual, en OSCCON2) cuando el cambio al externo se ha completado.
+@@ 33
+`ESPERA_PASOS` = 1000 pasos de 100 µs = 100 ms de espera máxima. Un cristal de 4 MHz arranca en pocos ms (el OST son 1024 ciclos, 0.26 ms) y el PLL engancha en ~200 µs (PLL03), así que sobra margen.
+@@ 35-37
+Comprobación al compilar (solo con reloj externo): 4 MHz × 4 debe ser igual a `FOSC_HZ`, la frecuencia con la que se configuraron los periféricos.
+@@ 39
+`estado`: el estado del reloj. Es `volatile` porque lo cambia la interrupción. Empieza como "interno".
+@@ 40
+`aviso_pendiente`: la interrupción lo pone a `true` cuando el externo falla en marcha, para que el lazo principal envíe el aviso (enviar texto desde una interrupción sería demasiado lento).
+@@ 42-49
+`usar_hfintosc_16mhz()` (solo con reloj externo): pone el HFINTOSC a 16 MHz (OSCFRQ) y lo pide como fuente con división 1:1 (OSCCON1). Se usa tanto para abandonar el cambio al arrancar como para volver de 1 MHz después de un fallo.
+@@ 51-54
+`reloj_inicializar()`. Con reloj externo declara `pasos`, el contador de la espera.
+@@ 56
+Borra OSFIF: la hoja de datos (8.4.3) pide borrarlo antes de pasar al reloj externo.
+@@ 57
+Pide el cambio: NOSC = oscilador externo con PLL ×4. El PIC sigue con el HFINTOSC mientras el externo no esté listo.
+@@ 58-60
+Espera, en pasos de 100 µs, a que COSC indique que el cambio se completó, salvo que salte OSFIF (el PLL no engancha, el FSCM salta: sección 8.3.2) o pasen 100 ms. `__delay_us(100)` es una espera activa del compilador XC8 que usa `_XTAL_FREQ` (16 MHz); es exacta porque mientras tanto el PIC funciona con el HFINTOSC a 16 MHz.
+@@ 61-63
+Si el cambio se completó y no hubo fallo: estado "externo" y se habilita la interrupción de fallo del oscilador (OSFIE), para atender en el acto un fallo posterior. Saltará cuando `main` habilite GIE y PEIE.
+@@ 64-69
+Si no: no hay reloj externo o el PLL no engancha. Se abandona el cambio volviendo al HFINTOSC a 16 MHz, se borra OSFIF y el estado pasa a "reserva" (la UART lo dirá en el mensaje de bienvenida y los bloques llevarán la bandera 64).
+@@ 70-73
+Con reloj interno solo se fija el estado "interno": el PIC ya funciona a 32 MHz desde los bits de configuración y `OSCILLATOR_Initialize()`.
+@@ 75-77
+`reloj_fallo_isr()` (solo con reloj externo): se ejecuta en la interrupción OSFIF.
+@@ 78-79
+Comentario: el FSCM ha pasado al HFINTOSC a 1 MHz; se vuelve a 16 MHz y ya no se usa el externo hasta el siguiente reset (un cristal que falla puede estar intermitente; volver a él sería peor).
+@@ 80
+Borra el indicador de la interrupción para que no vuelva a entrar.
+@@ 81
+Vuelve a 16 MHz con el HFINTOSC. Cambiar NOSC (de 010 a 110) despeja la condición de fallo.
+@@ 82
+Deshabilita la interrupción de fallo: ya no se usa el externo.
+@@ 83-86
+Si se estaba usando el externo, pasa a "reserva" y deja el aviso pendiente para el lazo principal.
+@@ 87-88
+Fin de la función y del `#if`.
+@@ 90-92
+`reloj_tarea()`: copia el aviso pendiente.
+@@ 94-96
+Si había aviso, lo borra, para que se envíe una sola vez.
+@@ 97-98
+Devuelve si hay que avisar. Con reloj interno siempre devuelve `false`.
+@@ 100-103
+`reloj_estado()`: devuelve el estado actual.

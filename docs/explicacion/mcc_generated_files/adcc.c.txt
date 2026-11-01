@@ -1,0 +1,103 @@
+# resumen: Driver del ADCC generado por MCC. ADCC_Initialize() deja el convertidor en modo básico, con referencia VDD, adquisición de 8 µs, TAD de 1 µs y disparo por PWM6; ADCC_ISR() atiende la interrupción y llama a la función instalada por la aplicación. El resto son utilidades estándar que el proyecto no usa.
+@@ 1-11
+Cabecera estilo MCC.
+@@ 13-15
+Comentario de sección.
+@@ 17-19
+Registros, cabecera del driver y `device_config.h`, que aporta la opción `RELOJ` para elegir el divisor del reloj del ADC.
+@@ 21-24
+`ADCC_ADI_InterruptHandler`: un **puntero a función** global. Guarda la función que debe ejecutarse en cada interrupción del ADC; `adquisicion.c` le asigna `al_terminar_conversion`. Es el mecanismo de MCC para que el driver no dependa de la aplicación.
+@@ 26-28
+Comentario de sección.
+@@ 30-32
+`ADCC_Initialize()`.
+@@ 33-44
+Umbrales inferior y superior (ADLTH, ADUTH) y consigna (ADSTPT) a 0. Son del módulo de cálculo (comparar el resultado con límites); no se usan. Cada valor de 16 bits ocupa dos registros de 8 (L = byte bajo, H = byte alto).
+@@ 45-48
+Acumulador (ADACC) y número de repeticiones (ADRPT) a 0: sin promediado por hardware.
+@@ 49-50
+`ADPCH` = 0: canal inicial ANA0 (RA0). Es provisional: `adq_inicializar()` lo cambia a I_OUT antes de habilitar las interrupciones.
+@@ 51-54
+**Tiempo de adquisición** ADACQ = 8 (en unidades de TAD): tras el disparo, el condensador de muestreo sigue conectado a la entrada 8 µs más antes de empezar la conversión. Sumado a los ~85 µs que el canal ya lleva seleccionado, sobra para que el condensador (28 pF) se cargue a menos de ½ LSB (sección 32.3 de la hoja de datos). Además, como este tiempo es un número fijo de ciclos de FOSC, el instante de muestreo queda a una distancia fija del flanco del PWM6.
+@@ 55-56
+`ADCAP` = 0: sin capacidad adicional de muestreo (es para medidas capacitivas, CVD).
+@@ 57-60
+Precarga (ADPRE) a 0: sin fase de precarga del condensador (también para CVD).
+@@ 61-62
+`ADCON1` = 0: sin doble muestreo, sin precarga ni anillo de guarda.
+@@ 63-64
+`ADCON2` = 0: **ADMD = modo básico** (sin promedio, ráfaga ni filtro), sin borrado del acumulador.
+@@ 65-66
+`ADCON3` = 0: parámetros del cálculo de error y de umbrales sin uso.
+@@ 67-68
+`ADSTAT` = 0: estado del módulo de cálculo.
+@@ 69-70
+`ADREF` = 0: **referencia positiva VDD y negativa VSS**. El ADC mide de 0 a VDD, por eso el firmware trabaja con cocientes entre canales (la VDD se cancela) y usa el FVR cuando necesita voltios.
+@@ 71-72
+`ADACT` = 0x0E: **disparo de autoconversión = `PWM6_out`**. Cada flanco de subida del PWM6 inicia una conversión sin que intervenga el software.
+@@ 73-79
+`ADCLK`: el divisor del reloj del ADC según el reloj del sistema. Con reloj externo (16 MHz), 0x07 = FOSC/16; con el interno (32 MHz), 0x0F = FOSC/32. La fórmula es FOSC / (2 × (ADCLK + 1)) y en los dos casos da **TAD = 1 µs**, dentro de los 0.5-9 µs que exige la hoja de datos (parámetro AD20). El periodo de 100 µs es así exactamente 100 TAD.
+@@ 80-81
+`ADCON0` = 0x84 (binario 1000 0100): ADON = 1 (ADC encendido), ADFM = 1 (resultado justificado a la derecha), ADCS = 0 (reloj del ADC derivado de FOSC a través de ADCLK, no el FRC), ADCONT = 0 (sin conversión continua) y ADGO = 0 (sin conversión en curso).
+@@ 83-86
+Borra el indicador de interrupción del ADC y habilita su interrupción (ADIE). No se atenderá hasta que `main` habilite GIE y PEIE.
+@@ 88
+Instala el manejador vacío por defecto; `adq_inicializar()` lo sustituirá por el de la aplicación.
+@@ 89
+Fin de `ADCC_Initialize()`.
+@@ 91-101
+`ADCC_StartConversion()`: selecciona el canal, enciende el ADC y arranca una conversión por software (ADGO = 1). Sin uso en el proyecto.
+@@ 103-107
+`ADCC_IsConversionDone()`: la conversión termina cuando el hardware pone ADGO a 0. Sin uso.
+@@ 109-113
+`ADCC_GetConversionResult()`: **la usa la interrupción de la aplicación**. Junta los dos registros del resultado: ADRESH (byte alto, desplazado 8 bits a la izquierda) más ADRESL (byte bajo). Con justificación a la derecha, el resultado va de 0 a 4095.
+@@ 115-138
+`ADCC_GetSingleConversion()`: selecciona el canal, enciende el ADC, quita el modo continuo, arranca la conversión, **espera** a que termine (bucle sobre ADGO) y devuelve el resultado. Es la forma más sencilla de usar un ADC, pero el instante de muestreo dependería del software (y bloquea la CPU); por eso el proyecto no la usa.
+@@ 140-144
+`ADCC_StopConversion()`: aborta una conversión poniendo ADGO a 0. Sin uso.
+@@ 146-150
+`ADCC_SetStopOnInterrupt()`: en modo continuo, para al producirse la interrupción. Sin uso.
+@@ 152-156
+`ADCC_DischargeSampleCapacitor()`: selecciona AVSS para descargar el condensador de muestreo. Sin uso como tal (el proyecto convierte AVSS para medir el offset).
+@@ 158-163
+`ADCC_LoadAcquisitionRegister()`: cambia el tiempo de adquisición (16 bits en dos registros). Sin uso.
+@@ 165-170
+`ADCC_SetPrechargeTime()`: cambia el tiempo de precarga. Sin uso.
+@@ 172-176
+`ADCC_SetRepeatCount()`: repeticiones para los modos de promediado. Sin uso.
+@@ 178-182
+`ADCC_GetCurrentCountofConversions()`: cuántas repeticiones lleva (ADCNT). Sin uso.
+@@ 184-188
+`ADCC_ClearAccumulator()`: borra el acumulador (ADACLR). Sin uso.
+@@ 190-194
+`ADCC_GetAccumulatorValue()`: lee el acumulador de 24 bits (tres registros). Sin uso: la aplicación suma en software para poder repartir las conversiones entre canales.
+@@ 196-200
+`ADCC_HasAccumulatorOverflowed()`: desbordamiento del acumulador. Sin uso.
+@@ 202-206
+`ADCC_GetFilterValue()`: salida del filtro paso bajo del módulo de cálculo. Sin uso.
+@@ 208-212
+`ADCC_GetPreviousResult()`: resultado de la conversión anterior. Sin uso.
+@@ 214-219
+`ADCC_DefineSetPoint()`: consigna para el cálculo de error. Sin uso.
+@@ 221-226
+`ADCC_SetUpperThreshold()`: umbral superior. Sin uso.
+@@ 228-233
+`ADCC_SetLowerThreshold()`: umbral inferior. Sin uso.
+@@ 235-239
+`ADCC_GetErrorCalculation()`: resultado del cálculo de error. Sin uso.
+@@ 241-245
+`ADCC_EnableDoubleSampling()`: doble muestreo. Sin uso.
+@@ 247-257
+Activar y desactivar el modo continuo (ADCONT). Sin uso: el modo continuo convertiría sin parar y se perdería el sincronismo con el PWM6.
+@@ 259-269
+Si el error cruzó los umbrales superior o inferior. Sin uso.
+@@ 271-275
+Etapa actual de la conversión (campo ADSTAT). Sin uso.
+@@ 277-280
+`ADCC_ISR()`: la rutina del ADC, llamada desde `interrupt_manager.c` cada 100 µs. Primero borra el indicador ADIF, para que la próxima conversión pueda volver a activarlo.
+@@ 282-286
+Si hay un manejador instalado (puntero distinto de nulo), lo llama: en este proyecto es `al_terminar_conversion()` de `adquisicion.c`.
+@@ 288-290
+`ADCC_SetADIInterruptHandler()`: guarda el puntero a la función de la aplicación.
+@@ 292-295
+`ADCC_DefaultInterruptHandler()`: manejador vacío, con un comentario de MCC que invita a escribir aquí el código o a instalar otra función (que es lo que hace la aplicación).

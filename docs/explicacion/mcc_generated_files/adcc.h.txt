@@ -1,0 +1,47 @@
+# resumen: Interfaz del driver del convertidor analógico-digital (ADCC, "ADC with Computation") generado por MCC: resume su configuración, define los tipos del resultado y de los canales y declara todas las funciones del driver, de las que el proyecto usa la inicialización, la lectura del resultado, la rutina de interrupción y el registro del manejador.
+@@ 1-8
+Cabecera estilo MCC: el ADC con cálculo (ADCC, llamado ADC2 en la hoja de datos) del PIC16F18426. Es un convertidor de aproximaciones sucesivas (SAR) de 12 bits con un módulo de cálculo (promedios, filtro, umbrales) que en este proyecto no se usa.
+@@ 9-17
+Resumen de la configuración: **modo básico** (MD = 000: una conversión por disparo, sin cálculo); **disparo de autoconversión** por `PWM6_out` (ADACT = 0x0E) cada 100 µs; **referencia** VDD/VSS (el ADC mide de 0 a VDD) con el resultado **justificado a la derecha** (los 12 bits en los bits bajos de ADRESH:ADRESL); **reloj** FOSC/32 o FOSC/16 según el reloj del sistema, es decir TAD = 1.0 µs, síncrono con FOSC (no el oscilador interno FRC del ADC); **adquisición** de 8 TAD (8 µs) sin precarga; **interrupción** ADIF al terminar cada conversión, con la función de la aplicación instalada mediante `ADCC_SetADIInterruptHandler()`.
+@@ 18
+Cierre del comentario.
+@@ 20-21
+Guarda de inclusión.
+@@ 23-29
+Inclusiones: registros y tipos estándar.
+@@ 31-35
+Inicio del bloque de compatibilidad con C++.
+@@ 37-43
+Comentarios de sección: tipos de datos.
+@@ 45
+`adc_result_t`: el resultado de una conversión cabe en 16 bits (12 bits útiles).
+@@ 46-48
+`uint24_t`: entero de 24 bits que ofrece XC8 (`__uint24`), para el acumulador del módulo de cálculo. Se define solo si no existe ya.
+@@ 50-53
+Comentario: el tipo de los canales. Los cuatro primeros llevan el nombre que se dio a los pines en el *Pin Module* de MCC; los números son los de la tabla 32-4 de la hoja de datos.
+@@ 55-66
+`adcc_channel_t`: los canales que MCC ofrece para este proyecto. `I_OUT` = 0x10 (RC0), `Q_OUT` = 0x11 (RC1), `V_REF` = 0x12 (RC2), `VCC_A` = 0x13 (RC3), y los internos `channel_AVSS` = 0x3B (0 V), `channel_Temp` = 0x3C (sensor de temperatura), `channel_DAC1` = 0x3D (salida del DAC), `channel_FVR_buffer1` = 0x3E y `channel_FVR_buffer2` = 0x3F. `adquisicion.c` usa los mismos números con sus propias constantes, para no depender de los nombres que se pongan en MCC.
+@@ 68-70
+Comentario de sección.
+@@ 72
+`ADCC_Initialize()`: configura el ADC (desde `SYSTEM_Initialize()`).
+@@ 73-74
+Arrancar una conversión por software y saber si terminó. Sin uso: aquí el arranque es por hardware.
+@@ 75
+`ADCC_GetConversionResult()`: lee el resultado de la última conversión. La usa la interrupción de `adquisicion.c`.
+@@ 76-77
+Conversión completa por software con espera, y parar una conversión. Sin uso.
+@@ 78-98
+Funciones del módulo de cálculo y de configuración avanzada: parar en interrupción, descargar el condensador de muestreo, tiempos de adquisición y precarga, repeticiones, acumulador, filtro, resultado anterior, consigna y umbrales, error calculado, doble muestreo, modo continuo y estado de la conversión. MCC las genera siempre; el proyecto no las usa (todo el cálculo se hace en `adquisicion.c` e `iq_proc.c`).
+@@ 99
+`ADCC_ISR()`: la rutina del ADC que llama `interrupt_manager.c`.
+@@ 100
+`ADCC_SetADIInterruptHandler()`: instala la función que se ejecutará en cada interrupción del ADC; recibe un **puntero a función** (`void (*)(void)`).
+@@ 101
+La variable que guarda ese puntero (`extern`: se define en `adcc.c`).
+@@ 102
+`ADCC_DefaultInterruptHandler()`: el manejador vacío por defecto.
+@@ 104-108
+Cierre del bloque de C++.
+@@ 110
+Cierre de la guarda de inclusión.

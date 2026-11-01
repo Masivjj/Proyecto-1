@@ -131,7 +131,7 @@ void main(void)
     INTERRUPT_PeripheralInterruptEnable();
 
     com_bienvenida(cargados);
-    /* El mensaje de bienvenida tarda unos 50 ms: lo que se pierda mientras
+    /* El mensaje de bienvenida tarda unos 65 ms: lo que se pierda mientras
      * tanto no cuenta como retraso */
     perdidas_inicio = adq_tramas_perdidas();
 

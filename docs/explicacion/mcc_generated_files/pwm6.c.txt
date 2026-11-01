@@ -1,0 +1,25 @@
+# resumen: Driver del PWM6 generado por MCC. Su inicialización activa el PWM6 sobre el TMR2 con un 50 % de ciclo de trabajo; no hace falta sacarlo a ningún pin para que dispare el ADC, porque el ADC usa la señal interna.
+@@ 1-8
+Cabecera estilo MCC.
+@@ 9-13
+Cálculos del PWM. Periodo = (T2PR + 1) × 4 × TOSC × prescaler: con 32 MHz (TOSC = 31.25 ns) y prescaler 4, o con 16 MHz (TOSC = 62.5 ns) y prescaler 2, da 200 × 125 ns × 4 = 100 µs. Ciclo de trabajo = PWM6DC / (4 × (T2PR + 1)) = 400 / 800 = 50 % (el registro de ciclo de trabajo tiene 2 bits más de resolución que el periodo, de ahí el factor 4). El ciclo de trabajo no influye en el muestreo: solo importa el flanco de subida; el 50 % da una señal cómoda de ver en el osciloscopio.
+@@ 15-17
+Comentario de sección.
+@@ 19-21
+Registros, `bool` y la cabecera del driver.
+@@ 23-25
+Comentario de sección.
+@@ 27-29
+`PWM6_Initialize()`.
+@@ 31-32
+`PWM6CON` = 0x80: PWM6 habilitado (bit EN) con polaridad normal (activo en alto: la salida está a 1 durante el ciclo de trabajo, así que sube al empezar cada periodo).
+@@ 34-38
+Ciclo de trabajo de 10 bits repartido en dos registros: `PWM6DCH` = 0x64 = 100 (los 8 bits altos) y `PWM6DCL` = 0 (los 2 bits bajos están en los bits 7-6). Valor total: 100 × 4 + 0 = 400.
+@@ 40-41
+`CCPTMRS1.P6TSEL` = 1: el PWM6 usa el TMR2 como base de tiempo (los PWM pueden elegir entre TMR2, TMR4 y TMR6).
+@@ 42
+Fin de `PWM6_Initialize()`.
+@@ 44-51
+`PWM6_LoadDutyValue()`: reparte un valor de 10 bits entre los dos registros (bits 9-2 en DCH y bits 1-0 desplazados a los bits 7-6 de DCL). Sin uso en el proyecto.
+@@ 53-57
+`PWM6_OutputStatusGet()`: devuelve el nivel actual de la salida (bit PWM6OUT). Sin uso.

@@ -1,0 +1,21 @@
+# resumen: Interfaz del driver de la referencia de tensión fija (FVR) de 1.024 V, que el firmware convierte como un canal más para conocer VCC_A en voltios.
+@@ 1-8
+Cabecera estilo MCC: referencia fija de tensión (FVR, *Fixed Voltage Reference*).
+@@ 9-13
+Se usa el buffer 1 (el que va al ADC) con ganancia 1×, es decir 1.024 V (±4 %); el buffer 2 (para comparadores y DAC) está apagado. El firmware convierte el FVR como un canal más y obtiene VCC_A en voltios como 1.024 × cV / cFVR (sección 10.4): al medir los dos contra VDD, la VDD se cancela.
+@@ 15-16
+Guarda de inclusión.
+@@ 18-24
+Inclusiones: registros y tipos estándar.
+@@ 26-30
+Inicio del bloque de compatibilidad con C++.
+@@ 32-34
+Comentario de sección.
+@@ 36
+`FVR_Initialize()`: enciende el FVR.
+@@ 37
+`FVR_IsOutputReady()`: indica si la tensión ya es estable (la usa `adq_inicializar()`).
+@@ 39-43
+Cierre del bloque de C++.
+@@ 45
+Cierre de la guarda de inclusión.

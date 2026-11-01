@@ -1,0 +1,27 @@
+# resumen: Lee los dos pulsadores con antirrebote por software (tres lecturas iguales seguidas, 30 ms) y genera un único evento por pulsación, como los botones latch del VI.
+@@ 1-9
+Cabecera. Los pulsadores son **activos en bajo**: conectan el pin a masa al pulsarlos, y el pin tiene activada la resistencia de *pull-up* interna, que lo mantiene en 1 cuando no se pulsan (sin componentes externos). Un contacto mecánico **rebota**: durante unos milisegundos abre y cierra varias veces. El antirrebote consiste en muestrear cada 10 ms y aceptar un cambio solo cuando el nivel nuevo lleva `ANTIRREBOTE_TICKS` lecturas seguidas estable. Cada pulsación da un solo evento, que vale para un bloque, como los botones *latch* del VI. Las demás órdenes (borrar cero, θ = 0, ganancia, borrar traza) solo llegan por la UART.
+@@ 10-12
+`mcc.h` aporta las macros de los pines (`BTN_CERO_GetValue`, `BTN_THETA_GetValue`); `iq_proc.h` las constantes de los eventos.
+@@ 14
+`ANTIRREBOTE_TICKS` = 3: tres lecturas de 10 ms = 30 ms de nivel estable para aceptar un cambio. Un rebote más corto se ignora (el simulador lo prueba con un rebote de 20 ms).
+@@ 16-19
+Estado de cada pulsador: `pulsado` es el último estado estable aceptado y `cuenta` cuántas lecturas seguidas llevan siendo distintas de él.
+@@ 21-22
+Un estado para cada pulsador (`static`: empiezan en 0, sin pulsar).
+@@ 24-26
+`antirrebote()`: recibe el estado de un pulsador (por puntero, para actualizarlo) y la lectura actual (`true` = pulsado). Devuelve `true` solo en el momento en que se confirma una pulsación.
+@@ 27-30
+Si la lectura coincide con el estado estable, no hay cambio: reinicia la cuenta. Así un rebote que vuelve al estado anterior no acumula.
+@@ 31-33
+Si es distinta, cuenta una lectura más; mientras no lleguen a 3 seguidas, todavía no se acepta.
+@@ 34-37
+A la tercera lectura distinta, el cambio se acepta: reinicia la cuenta y actualiza el estado. Devuelve `leido`: `true` si el cambio fue a pulsado (genera evento) y `false` si fue a soltado (no genera nada). Por eso mantener el botón pulsado no repite el evento.
+@@ 39-41
+`botones_tarea()`: empieza sin eventos.
+@@ 43-45
+Lee "Fijar cero": `GetValue() == 0u` es `true` cuando el pin está a 0, es decir pulsado (activo en bajo). Si se confirma una pulsación, añade el evento de fijar cero.
+@@ 46-48
+Lo mismo con "Calibrar θ". Con el cristal en modo depuración, o con `SALIDA_DISPARO` = 1, `BTN_THETA_GetValue()` vale siempre 1 (no hay pulsador) y nunca genera eventos.
+@@ 49-50
+Devuelve la máscara de eventos.

@@ -1,0 +1,76 @@
+# resumen: Da nombre a los pines del PIC (I_OUT, LED, BTN_CERO…) mediante macros que leen o escriben sus registros, y decide según el modo de reloj qué pin es el LED, dónde está el pulsador "Calibrar θ" y cómo se configura el puerto A. La aplicación solo usa los nombres, nunca los registros directamente.
+@@ 1-8
+Cabecera estilo MCC: macros de los pines generadas por el *Pin Module* de MCC Classic.
+@@ 9-23
+**Mapa de pines con el reloj interno** (sección 10.3 de la especificación, encapsulado de 14 pines):
+
+- RC0 a RC3 (pines 10, 9, 8, 7): las cuatro entradas analógicas I_OUT, Q_OUT, V_REF y VCC_A, que vienen de los bornes J805.1, .3, .2 y .5 de la tarjeta.
+- RC4 (pin 6) y RC5 (pin 5): transmisión (TX) y recepción (RX) de la UART, asignadas con PPS, hacia el adaptador USB-serie.
+- RA2 (pin 11) y RA4 (pin 3): los pulsadores "Fijar cero" y "Calibrar θ", con pull-up interno y activos en bajo.
+- RA5 (pin 2): el LED de estado y alarma.
+- RA0 (pin 13) y RA1 (pin 12): las líneas de programación ICSPDAT e ICSPCLK, sin otro uso (en producción RA1 saca el disparo del ADC; lo configura `adquisicion.c`).
+- RA3 (pin 4): MCLR, con pull-up externo de 10 kΩ.
+@@ 24-31
+**Cambios con reloj externo**: con el cristal, RA5 y RA4 son OSC1 y OSC2 (las dos patas del cristal), el LED pasa a RA0 y el pulsador "Calibrar θ" a RA1; con el oscilador, RA5 es CLKIN (la entrada del oscilador), el LED pasa a RA0, el pulsador sigue en RA4 y RA1 sigue sacando el disparo del PWM6.
+@@ 32-38
+En las compilaciones de depuración (`__DEBUG`), RA0 y RA1 los usa el depurador, así que con reloj externo no hay LED y, con cristal, tampoco pulsador "Calibrar θ" (queda la orden `c`).
+@@ 40-41
+Guarda de inclusión.
+@@ 43-48
+Incluye `<xc.h>` (registros del PIC) y `device_config.h` (y con él `app_config.h`, para conocer `RELOJ`, `SALIDA_DISPARO` y `BOTON_THETA_EN_RA1`).
+@@ 50-57
+Constantes de comodidad de MCC para los valores de los registros: en TRIS, 1 = entrada y 0 = salida; en LAT, 1 = alto y 0 = bajo; en ANSEL, 1 = analógico y 0 = digital.
+@@ 59-66
+**Configuración del puerto A con reloj interno**: no hay LED en RA0 ni pulsador en RA1; el pulsador está en RA4. Valores de los registros (un bit por pin, bit 0 = RA0):
+
+- `TRISA` = 0x1F (binario 01 1111): RA0-RA4 entradas y RA5 salida (el LED).
+- `ANSELA` = 0x03: RA0 y RA1 analógicos (sin uso: en analógico el buffer digital se apaga y no consume ni lee ruido).
+- `WPUA` = 0x14 (binario 01 0100): pull-up activado en RA2 y RA4, los pulsadores.
+@@ 67-74
+**Con reloj externo**: en depuración, ni LED en RA0 ni pulsador en RA1, porque son del depurador; en producción, LED en RA0 y pulsador en RA1 si `BOTON_THETA_EN_RA1` (cristal sin salida del disparo).
+@@ 75
+El pulsador sigue en RA4 solo con el oscilador (el cristal ocupa RA4).
+@@ 76-79
+Los registros del puerto A con reloj externo, calculados con esas condiciones: RA5 (y RA4 con cristal) quedan como **entradas digitales sin pull-up**, para no cargar el oscilador. `TRISA` = 0x3E si el LED está en RA0 (RA0 salida, todo lo demás entrada) o 0x3F si no; `ANSELA` deja RA0 y RA1 en digital solo si se usan; `WPUA` siempre activa el pull-up de RA2 y, además, el de RA4 o RA1 según dónde esté el pulsador. Los valores de cada caso se comprueban en `tests/verificar_reloj.py`.
+@@ 80
+Fin del `#if` del reloj.
+@@ 82-83
+Constantes de MCC para el pull-up (sin uso en la aplicación).
+@@ 85-91
+**Alias del pulsador "Fijar cero" (RA2)**. Este bloque muestra el patrón que MCC genera para cada pin con nombre: cada registro de un pin tiene su macro. `_TRIS` es el bit de dirección; `_LAT` el bit del *latch* de salida (lo que el pin saca si es salida); `_PORT` el bit de lectura del pin (su nivel real); `_WPU` su pull-up débil; `_OD` el modo de drenador abierto; `_ANS` el modo analógico. `TRISAbits.TRISA2` es la forma de XC8 de acceder a un bit de un registro: una estructura de campos de bits superpuesta al registro.
+@@ 92-94
+Macros de escritura: poner el pin a 1, a 0 o invertirlo, escribiendo en LAT (escribir en LAT y no en PORT evita el problema de leer-modificar-escribir de los PIC). Se envuelven en `do { … } while(0)` para que la macro se comporte como una sola instrucción también dentro de un `if` sin llaves.
+@@ 95
+`BTN_CERO_GetValue()`: lee el nivel del pin (0 = pulsado, por ser activo en bajo). Es la única macro de este pin que usa la aplicación (`botones.c`).
+@@ 96-103
+Macros para cambiar en marcha la dirección, el pull-up, el modo push-pull / drenador abierto y el modo analógico / digital. MCC las genera siempre; la aplicación no las usa porque la configuración se hace una vez en `PIN_MANAGER_Initialize()`.
+@@ 105-124
+**Alias de "Calibrar θ" en RA4** (con reloj interno y con oscilador): el mismo patrón de macros que el bloque anterior, sobre RA4.
+@@ 125-127
+Con el cristal (sin salida del disparo ni depurador), "Calibrar θ" se lee en RA1. Solo se define `GetValue`, que es lo único que usa `botones.c`.
+@@ 128-131
+En los demás casos con cristal no hay pulsador: `BTN_THETA_GetValue()` vale siempre 1 (no pulsado, por ser activo en bajo), así que nunca genera eventos. Queda la orden `c` por la UART.
+@@ 133-152
+**Alias del LED en RA5** con reloj interno, con el mismo patrón de macros. La aplicación usa `LED_SetHigh()` y `LED_SetLow()` en `main.c`.
+@@ 153-158
+Con reloj externo en producción, el LED está en RA0: las mismas cuatro macros que usa la aplicación, sobre LATA0/RA0.
+@@ 159-165
+En depuración con reloj externo no hay LED: las macros no hacen nada (`do { } while(0)` vacío) y `GetValue` devuelve 0. Así `main.c` compila igual en todos los casos.
+@@ 167-185
+**Alias de I_OUT (RC0)**, la entrada analógica del canal I: el mismo patrón de macros sobre el puerto C. La aplicación no las usa: el pin queda analógico desde `PIN_MANAGER_Initialize()` y el ADC lo selecciona por número de canal (0x10).
+@@ 187-205
+**Alias de Q_OUT (RC1)**, canal 0x11 del ADC. Mismo patrón, sin uso en la aplicación.
+@@ 207-225
+**Alias de V_REF (RC2)**, canal 0x12. Mismo patrón.
+@@ 227-245
+**Alias de VCC_A (RC3)**, canal 0x13. Mismo patrón.
+@@ 247-257
+Macros de RC4, el pin de transmisión de la UART. MCC genera un juego reducido para los pines sin nombre propio; no se usan porque el pin lo controla la EUSART a través de PPS.
+@@ 259-269
+Macros de RC5, el pin de recepción de la UART. Igual que RC4.
+@@ 271-281
+`PIN_MANAGER_Initialize()`: configura todos los pines (en `pin_manager.c`).
+@@ 283-293
+`PIN_MANAGER_IOC()`: rutina de la interrupción por cambio de nivel (*Interrupt-On-Change*). MCC la declara siempre; el proyecto no usa esa interrupción y la función está vacía.
+@@ 295
+Cierre de la guarda de inclusión.

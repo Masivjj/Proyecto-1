@@ -1,0 +1,11 @@
+# resumen: Define _XTAL_FREQ, la frecuencia del reloj que usan las esperas __delay_us() y __delay_ms() del compilador, a partir de la opción de reloj. También es el puente por el que todos los drivers de MCC ven app_config.h.
+@@ 1-13
+Cabecera estilo MCC. Avisa de que, si se regenera con MCC, este archivo se sustituye y hay que volver a dejar `_XTAL_FREQ = FOSC_HZ`, porque depende de la opción `RELOJ`.
+@@ 15-16
+Guarda de inclusión.
+@@ 18
+Incluye `app_config.h`. Como `mcc.h` incluye este archivo, cualquier código que incluya `mcc.h` (todos los drivers) conoce `RELOJ`, `FOSC_HZ`, `RELOJ_EXTERNO`, etc.
+@@ 20-21
+`_XTAL_FREQ`: XC8 la necesita para que `__delay_us(n)` y `__delay_ms(n)` sepan cuántos ciclos esperar. Vale 32 MHz con el reloj interno y 16 MHz con el externo (o su reserva), según `FOSC_HZ`.
+@@ 23
+Cierre de la guarda de inclusión.

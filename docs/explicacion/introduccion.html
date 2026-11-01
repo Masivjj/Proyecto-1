@@ -1,0 +1,63 @@
+<section class="intro-sec" aria-labelledby="i-idea">
+  <h2 id="i-idea">El programa en un párrafo</h2>
+  <p>El PIC16F18426 lee cuatro tensiones de la tarjeta demoduladora P2 (I_OUT, Q_OUT, V_REF y VCC_A) y dos referencias internas (FVR y AVSS). Cada una se muestrea <b>1000 veces por segundo</b> con el ADC disparado por hardware, así que el instante de muestreo no depende del software. Cada 10 ms suma las 10 conversiones de cada canal, las procesa como el VI de LabVIEW <span class="mono">P2_IQ_SINAD.vi</span> (normalización, ganancia, cero, rotación θ) y envía el resultado por la UART. Cada 0.1 s calcula los indicadores |V|, Fase y d. Todo lo que es tiempo lo marca el hardware; el lazo principal solo procesa lo que la interrupción deja en una cola.</p>
+</section>
+
+<section class="intro-sec" aria-labelledby="i-recorrido">
+  <h2 id="i-recorrido">Recorrido de una muestra, del pin a la UART</h2>
+  <ol class="recorrido">
+    <li><span class="t">cada 100 µs</span><div>El <b>TMR2</b> llega a 199 y se reinicia. El <b>PWM6</b> da un flanco de subida. <a href="#mcc-generated-files-tmr2-c">tmr2.c</a>, <a href="#mcc-generated-files-pwm6-c">pwm6.c</a></div></li>
+    <li><span class="t">+0 µs</span><div>Ese flanco arranca una conversión del <b>ADC</b> sin intervención del software (ADACT = PWM6_out). <a href="#mcc-generated-files-adcc-c">adcc.c</a></div></li>
+    <li><span class="t">+8 µs</span><div>Termina la adquisición (8 TAD) y el condensador de muestreo se desconecta: <b>instante de muestreo</b>, a un número fijo de ciclos del flanco.</div></li>
+    <li><span class="t">+~22 µs</span><div>Termina la conversión (14 TAD + 2 TCY). Salta la interrupción ADIF: <a href="#mcc-generated-files-interrupt-manager-c">interrupt_manager.c</a> → <span class="mono">ADCC_ISR()</span> → <span class="mono">al_terminar_conversion()</span>, que suma el resultado en su canal y elige el canal del disparo siguiente. <a href="#app-adquisicion-c">adquisicion.c</a></div></li>
+    <li><span class="t">cada 1 ms</span><div>Se completa una <b>ronda</b> de 10 disparos: I, Q, V_REF, VCC_A, FVR, AVSS y 4 libres. Cada canal se ha convertido una vez: 1000 muestras/s por canal.</div></li>
+    <li><span class="t">cada 10 ms</span><div>Tras 10 rondas, <span class="mono">fin_de_trama()</span> deja las 6 sumas en una <b>cola</b> de 4 tramas.</div></li>
+    <li><span class="t">en cuanto puede</span><div><span class="mono">main()</span> saca la trama (<span class="mono">adq_leer</span>) y <span class="mono">atender_muestra()</span> la procesa: <span class="mono">iq_procesar()</span> calcula Ip, Qp, I′, Q′ <a href="#app-iq-proc-c">iq_proc.c</a>; el punto va a la traza <a href="#app-traza-c">traza.c</a> y la línea a la UART <a href="#app-comunicacion-c">comunicacion.c</a>.</div></li>
+    <li><span class="t">cada 0.1 s</span><div>Con la décima muestra, <span class="mono">cerrar_bloque()</span> aplica cero y θ pendientes y calcula |V|, Fase y d; se envía la línea <span class="mono">B,…</span>.</div></li>
+    <li><span class="t">~87 µs por carácter</span><div><span class="mono">EUSART1_Write()</span> deja cada carácter en un buffer de 128 bytes y la interrupción de transmisión los envía uno a uno a 115200 baudios. <a href="#mcc-generated-files-eusart1-c">eusart1.c</a></div></li>
+  </ol>
+</section>
+
+<section class="intro-sec" aria-labelledby="i-mapa">
+  <h2 id="i-mapa">Qué hace cada archivo</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Archivo</th><th>Responsabilidad</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#main-c">main.c</a></td><td>Arranque y lazo principal: procesa cada trama y atiende botones, UART, EEPROM y LED.</td></tr>
+        <tr><td><a href="#app-app-config-h">app_config.h</a></td><td>Todas las constantes y opciones de compilación (reloj, tiempos, tamaños).</td></tr>
+        <tr><td><a href="#app-adquisicion-c">adquisicion.c</a></td><td>ADC disparado por hardware, rondas de 1 ms, tramas de 10 ms, cola y captura <span class="mono">m</span>.</td></tr>
+        <tr><td><a href="#app-iq-proc-c">iq_proc.c</a></td><td>El procesamiento del VI (P1-P10). Sin hardware: se prueba en el PC.</td></tr>
+        <tr><td><a href="#app-comunicacion-c">comunicacion.c</a></td><td>Protocolo de texto: líneas de muestra y bloque, órdenes de un carácter, estado, volcado y captura.</td></tr>
+        <tr><td><a href="#app-formato-c">formato.c</a></td><td>Números a texto sin <span class="mono">printf</span> (el PIC no tiene división por hardware).</td></tr>
+        <tr><td><a href="#app-traza-c">traza.c</a></td><td>Últimos 64 puntos del plano polar; presta su RAM a la captura.</td></tr>
+        <tr><td><a href="#app-ajustes-c">ajustes.c</a></td><td>Calibración en la EEPROM con suma de control, escrita byte a byte sin bloquear.</td></tr>
+        <tr><td><a href="#app-botones-c">botones.c</a></td><td>Pulsadores con antirrebote de 30 ms.</td></tr>
+        <tr><td><a href="#app-reloj-c">reloj.c</a></td><td>Opción de reloj externo de 4 MHz con PLL ×4 y reserva interna.</td></tr>
+        <tr><td><a href="#mcc-generated-files-mcc-c">mcc_generated_files/</a></td><td>Drivers de MCC Classic: configuración del chip, pines, interrupciones, TMR2, PWM6, ADC, FVR, UART y EEPROM.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="intro-sec" aria-labelledby="i-glosario">
+  <h2 id="i-glosario">Glosario</h2>
+  <dl class="glosario">
+    <div><dt>I, Q</dt><dd>Componentes en fase y en cuadratura de la señal de la sonda, a la salida del demodulador. Juntas forman un vector en el plano polar.</dd></div>
+    <div><dt>Lift-off</dt><dd>Señal que produce la sonda al despegarse del metal. θ se calibra para que caiga sobre 0° y una fisura se distinga por su fase.</dd></div>
+    <div><dt>Ratiométrico</dt><dd>Las salidas de la tarjeta escalan con su alimentación VCC_A; dividir por VCC_A las hace independientes de la batería.</dd></div>
+    <div><dt>FOSC, TCY</dt><dd>Frecuencia del reloj del sistema (32 o 16 MHz) y ciclo de instrucción (4 ciclos de FOSC).</dd></div>
+    <div><dt>TAD</dt><dd>Periodo del reloj del ADC: 1 µs. Una conversión tarda 14 TAD más 2 TCY.</dd></div>
+    <div><dt>LSB</dt><dd>Un escalón del ADC: VDD / 4096, unos 0.9 mV con VDD = 3.7 V.</dd></div>
+    <div><dt>Interrupción (ISR)</dt><dd>Función que el hardware ejecuta en cuanto ocurre un evento (fin de conversión, carácter recibido), interrumpiendo al lazo principal.</dd></div>
+    <div><dt>volatile</dt><dd>Variable que puede cambiar fuera del flujo normal (en una interrupción): el compilador debe leerla de memoria cada vez.</dd></div>
+    <div><dt>static</dt><dd>En una variable global, visible solo en su archivo; en una local, conserva su valor entre llamadas.</dd></div>
+    <div><dt>Sección crítica</dt><dd>Trozo de código que se ejecuta con las interrupciones deshabilitadas para que no modifiquen a medias datos compartidos.</dd></div>
+    <div><dt>Buffer circular</dt><dd>Array con índices de escritura y lectura que vuelven a 0 al llegar al final (cola de tramas, UART, traza).</dd></div>
+    <div><dt>Máscara de bits</dt><dd>Un byte en el que cada bit es una opción o un aviso (etapas, eventos, banderas).</dd></div>
+    <div><dt>TRIS, LAT, PORT, ANSEL, WPU</dt><dd>Registros de un pin: dirección, valor de salida, lectura, modo analógico y pull-up.</dd></div>
+    <div><dt>PPS</dt><dd>Peripheral Pin Select: asigna un periférico (UART, PWM) a un pin.</dd></div>
+    <div><dt>FSCM</dt><dd>Fail-Safe Clock Monitor: si el reloj externo se para, pasa a uno interno y avisa con OSFIF.</dd></div>
+    <div><dt>Guarda de inclusión</dt><dd><span class="mono">#ifndef X_H / #define X_H / #endif</span>: evita procesar dos veces una cabecera.</dd></div>
+  </dl>
+</section>

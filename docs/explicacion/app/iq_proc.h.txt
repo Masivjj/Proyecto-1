@@ -1,0 +1,81 @@
+# resumen: Interfaz del procesamiento I/Q: los tipos de datos que entran (códigos del ADC) y salen (muestra y bloque), las máscaras de etapas, eventos y banderas, y las funciones para configurar y ejecutar el procesamiento. No depende del hardware, por eso también se compila y prueba en el PC.
+@@ 1-14
+Cabecera. Enumera las etapas del VI en el mismo orden que la especificación (sección 4):
+
+- **P1** VCC_A y protección de 2.5 V.
+- **P2** factor de escala k ratiométrico y corrección del signo de I.
+- **P3** señales procesadas Ip, Qp: milivoltios a la salida del mezclador, normalizados a 3.7 V.
+- **P4** medias del bloque.
+- **P5** cero I0, Q0 (botones "Fijar cero" y "Borrar 0").
+- **P6** señales sin el cero, Ic y Qc.
+- **P7** ángulo de calibración θ ("Calibrar θ" y "θ = 0").
+- **P8** rotación por −θ: señales finales I′, Q′.
+- **P10** indicadores del bloque: |V|, Fase y d estimada.
+
+La traza del plano polar (P9) está en `traza.c`.
+@@ 15-18
+Las cinco etapas que se pueden desactivar en marcha (cero, θ, ganancia, normalización y autocero) se controlan con `iq_fijar_etapas()`, a la que llegan las órdenes `Z`, `T`, `G`, `N` y `A` de la UART.
+@@ 19-23
+Decisión de diseño importante para la sustentación: este módulo **no toca el hardware** (no usa registros ni drivers). Por eso compila igual con XC8 para el PIC y con gcc en el PC, y se verifica en el PC con los vectores de prueba de la sección 9 de la especificación (`tests/test_iq_proc.c`, 102 pruebas).
+@@ 24-25
+Guarda de inclusión.
+@@ 27-29
+Incluye `stdbool`, `stdint` y `app_config.h` (constantes como `N_BLOQUE` o `GANANCIA_INICIAL`).
+@@ 31-32
+Explica `iq_codigos_t`: cada código es la **suma** de 10 conversiones de 12 bits (de 0 a 40950), todas medidas contra VDD (la referencia del ADC). No se divide por 10 porque las fórmulas trabajan con cocientes entre canales, en los que el factor 10 se cancela, y así no se pierde resolución.
+@@ 33-40
+La estructura `iq_codigos_t` con un campo de 16 bits por canal: `cI` (I_OUT, borne J805.1), `cQ` (Q_OUT, J805.3), `cR` (V_REF, J805.2), `cV` (VCC_A, J805.5), `cF` (FVR de 1.024 V; 0 si no se mide) y `cZ` (AVSS, 0 V interno, para el autocero).
+@@ 42-46
+`iq_muestra_t`: el resultado de cada muestra (100 por segundo), en milivoltios de tipo `float`. `Ip`, `Qp` son las señales procesadas (lo que el VI llama "I y Q procesadas"); `I1`, `Q1` son las finales I′, Q′, después de restar el cero y rotar por θ (lo que se dibuja en el plano polar).
+@@ 48-59
+`iq_bloque_t`: el resultado de cada bloque de 10 muestras (0.1 s): `V` = módulo |V| en mV; `fase` en grados medida desde el eje del lift-off; `d` = profundidad estimada en unidades de 10⁻⁴; `I0`, `Q0` y `theta` = la calibración vigente; `vcc` = VCC_A medio en voltios (0 si no se pudo medir); `banderas` = alarmas (`IQ_FL_x`); `eventos` = acciones aplicadas al cerrar este bloque (`IQ_EV_x`); `etapas` = etapas activas (`IQ_ETAPA_x`). Los tres últimos son bytes de máscaras de bits.
+@@ 61-63
+Qué significa desactivar una etapa: deja de actuar sobre la señal y sus órdenes se ignoran, pero lo que tenía guardado (I0, Q0, θ, G) se conserva y vuelve a aplicarse al reactivarla.
+@@ 64
+Bit 0: etapa de cero (pasos P5-P6: restar I0, Q0; botones "Fijar cero" y "Borrar 0").
+@@ 65
+Bit 1: etapa de θ (P7-P8: rotar por −θ; "Calibrar θ" y "θ = 0").
+@@ 66
+Bit 2: etapa de ganancia (P2: dividir por G; desactivada equivale a G = 1).
+@@ 67-68
+Bit 3: normalización (P1-P2: normalizar a VCC_A = 3.7 V). Desactivada, el resultado son voltios absolutos, medidos gracias al FVR. La línea 68 continúa el comentario.
+@@ 69-70
+Bit 4: autocero (restar a todos los canales el offset del ADC medido en AVSS, `cZ`).
+@@ 71
+`IQ_ETAPAS_TODAS` = 0x1F: las cinco etapas (bits 0-4).
+@@ 73-74
+Los **eventos** equivalen a los botones *latch* del VI: cada pulsación vale para un bloque y se aplica al cerrar el bloque en curso, no en mitad de él, para que las medias del bloque sean coherentes.
+@@ 75-79
+Un bit por evento: fijar cero, borrar cero, calibrar θ, poner θ = 0 y borrar la traza.
+@@ 80
+`IQ_EV_CALIBRACION`: los cuatro eventos que cambian la calibración. Si alguno se aplicó, `main.c` guarda la calibración en la EEPROM.
+@@ 82-83
+Banderas del bloque. Bit 0: VCC_A ≤ 2.5 V, se usó 3.7 V en su lugar (el LED del VI).
+@@ 84-85
+Bits 1 y 2: I_OUT o Q_OUT a menos de ~50 mV de un extremo (0 V o VCC_A): la salida de la tarjeta está saturada y la medida no es válida.
+@@ 86
+Bit 3: VCC_A ≥ VDD. El ADC no puede medir por encima de VDD, así que la normalización no es fiable (hace falta el divisor `DIVISOR_VCCA`).
+@@ 87
+Bit 4: el FVR dio una lectura fuera de lo plausible; no se conoce VCC_A en voltios.
+@@ 88
+Bit 5 (lo pone `main.c`): se descartaron tramas porque la cola estaba llena.
+@@ 89
+Bit 6 (lo pone `main.c`): el reloj externo de 4 MHz no está y se usa el oscilador interno de reserva.
+@@ 90
+`IQ_FL_ALARMA`: las banderas que encienden el LED de alarma fijo (VCC_A fuera de rango y cualquier saturación). Retraso, FVR y reloj no son alarmas de la medida.
+@@ 92-94
+`iq_inicializar()`: deja el estado como al arrancar el VI: cero y θ a 0, ganancia y etapas iniciales.
+@@ 96-97
+`iq_fijar_ganancia(g)` acepta solo 2, 11 o 101 (los valores de la tarjeta) y devuelve `false` con cualquier otro; `iq_ganancia()` la devuelve.
+@@ 99-103
+`iq_fijar_etapas(activas)` fija la máscara de etapas y devuelve las que realmente quedan activas: sin FVR no se puede desactivar la normalización (no habría forma de dar voltios absolutos). El comentario enseña cómo alternar una etapa con el operador XOR (`^`), que invierte el bit indicado. `iq_etapas()` devuelve la máscara actual.
+@@ 105-107
+`iq_offset_lsb()`: el offset del ADC medido en AVSS en la última muestra, en LSB (lo muestra la orden `?`). Un offset negativo se ve como 0, porque el ADC no da códigos menores que 0.
+@@ 109-110
+Fijar y leer la calibración (I0, Q0 en mV y θ en grados). Las usa `ajustes.c` para cargarla de la EEPROM y guardarla. La lectura usa punteros para devolver tres valores.
+@@ 112
+`iq_evento(eventos)`: registra uno o varios eventos (máscara `IQ_EV_x`) para aplicarlos al cerrar el bloque.
+@@ 114-116
+`iq_procesar()`: procesa una muestra (los códigos de una trama) y llena `*m`. Si con esta muestra se completan 10, cierra el bloque, llena `*b` y devuelve `true`.
+@@ 118
+Cierre de la guarda de inclusión.

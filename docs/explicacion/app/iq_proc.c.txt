@@ -1,0 +1,169 @@
+# resumen: Implementa el procesamiento del VI paso a paso (P1-P10): de los códigos del ADC a milivoltios normalizados (con autocero, protección de 2.5 V, ganancia y signo de I), resta del cero y rotación por θ en cada muestra, y al cerrar cada bloque de 10 muestras las medias, la captura del cero y de θ y los indicadores |V|, Fase y d. Es código C puro, sin hardware, verificado en el PC con 102 pruebas.
+@@ 1-6
+Cabecera. Las fórmulas, constantes y el orden de las operaciones son los de las secciones 4 y 10 de la especificación. Avisa de que hay diferencias con LabVIEW y que todas son, como mucho, de un bloque (0.1 s).
+@@ 7-11
+Primera diferencia: cuando se captura el cero o θ en un bloque, las **muestras** lo usan desde el bloque siguiente (diferencia aceptada en la sección 10.6). En cambio, los **indicadores** del bloque (|V|, Fase, d) ya usan el cero y θ de ese mismo bloque, como el VI. Es posible porque restar el cero y rotar son operaciones **lineales**: la media de I′, Q′ se obtiene exactamente aplicándolas a las medias de Ip, Qp, sin rehacer las 10 muestras.
+@@ 12-13
+Segunda diferencia: la decisión del paso P1 (si VCC_A > 2.5 V es válido) se toma con la media del bloque anterior; en el primer bloque, con la primera muestra.
+@@ 14
+Tercera: la normalización ratiométrica usa el VCC_A de cada muestra (sección 10.4), no la media del bloque.
+@@ 15-19
+Las etapas se pueden desactivar en marcha; desactivar una no borra lo que tenía guardado y al reactivarla vuelve a aplicarse.
+@@ 20-21
+`<math.h>` aporta `sinf`, `cosf`, `atan2f` y `sqrtf`, las versiones `float` (32 bits) de las funciones trigonométricas y de la raíz. Luego la propia cabecera del módulo.
+@@ 23-25
+El cálculo necesita `float` de 32 bits (IEEE 754). XC8 permite `float` de 24 bits para ahorrar memoria, que no daría la precisión necesaria. Esta línea es una comprobación en tiempo de compilación: si `sizeof(float)` no es 4, el array tiene tamaño −1 y la compilación falla con un error en este archivo. El comentario indica dónde se configura en MPLAB X (*XC8 Global Options › Size of float/double = 32 bits*; el proyecto ya viene así).
+@@ 27-28
+Factores de conversión entre radianes y grados (180/π y π/180), como constantes `float`.
+@@ 30-31
+`FONDO_SUMA`: el máximo de una suma de 10 conversiones, 10 × 4095 = 40950, en 32 bits.
+@@ 32
+`CV_SATURADO` = 10 × 4094: si la suma de VCC_A llega aquí, cada conversión está en el código máximo o casi: VCC_A ≥ VDD y el ADC satura, así que la normalización no es fiable.
+@@ 33
+`CV_MINIMO` = 40950 / 8: por debajo de VDD/8 la lectura de VCC_A no es creíble y no se usa como divisor (evita multiplicar por factores enormes o dividir por cero).
+@@ 34-36
+Rango plausible de la suma del FVR. El FVR vale 1.024 V ±4 % y la VDD puede ir de 2.3 a 5.5 V, así que una conversión del FVR debería estar aproximadamente entre 1.065 / 2.3 × 4095 ≈ 1896 y 0.983 / 5.5 × 4095 ≈ 732. Los límites 600 y 2100 por conversión dejan margen; fuera de ellos la lectura se considera errónea.
+@@ 38-41
+Controles del procesamiento: `ganancia` (G de la tarjeta: 2, 11 o 101), `etapas` (máscara de etapas activas) y `ultimo_cz` (suma de AVSS de la última muestra, para informar del offset).
+@@ 43-46
+Estado persistente, el equivalente a los *shift registers* del VI: el cero `I0`, `Q0` en mV, el ángulo `theta_deg` en grados y su coseno y seno precalculados (`c_th`, `s_th`), que solo se recalculan cuando cambia θ para no llamar a `sinf`/`cosf` 100 veces por segundo.
+@@ 48-50
+Estado del paso P1: `vcc_valida` es la decisión vigente (VCC_A > 2.5 V) y `primera_muestra` indica que todavía no se ha procesado ninguna muestra.
+@@ 52-57
+Acumuladores del bloque en curso: suma de Ip y Qp (para las medias), sumas de los códigos de VCC_A y del FVR (para la media de VCC_A en voltios), `n_blk` (muestras acumuladas), `banderas_blk` (banderas detectadas en el bloque) y `eventos_pend` (eventos pedidos que se aplicarán al cerrar).
+@@ 59-63
+`fijar_theta()`: guarda el nuevo ángulo en grados.
+@@ 64-66
+Para θ = 0 no hace falta trigonometría: coseno 1 y seno 0 exactos. Ahorra tiempo de CPU y evita errores de redondeo.
+@@ 67-72
+Para otros ángulos, convierte a radianes y calcula coseno y seno una sola vez.
+@@ 74-82
+`reiniciar_bloque()`: pone a cero los acumuladores y las banderas del bloque para empezar uno nuevo.
+@@ 84-86
+`quitar_cero_y_rotar()`: los pasos P6 y P8 aplicados a un punto (Ip, Qp) para obtener (I′, Q′). Recibe los valores por copia (puede modificarlos sin efecto fuera) y devuelve el resultado por punteros.
+@@ 87-90
+P6: si la etapa de cero está activa, resta el cero (Ic = Ip − I0, Qc = Qp − Q0).
+@@ 91-93
+P8: si la etapa de θ está activa, **rota el punto un ángulo −θ**: I′ = I·cos θ + Q·sen θ; Q′ = Q·cos θ − I·sen θ. Es la matriz de rotación por −θ. Efecto: un punto que estaba en el ángulo θ (la dirección del lift-off calibrado) queda sobre el eje de 0°.
+@@ 94-98
+Si la rotación está desactivada, el punto pasa sin girar.
+@@ 100-111
+`iq_inicializar()`: ganancia inicial, etapas iniciales (pasando por `iq_fijar_etapas` para aplicar sus reglas), cero a (0, 0), θ = 0, VCC_A válido por defecto, aún sin muestras, sin eventos pendientes y bloque vacío.
+@@ 113-120
+`iq_fijar_ganancia()`: acepta solo los tres valores posibles de los jumpers de la tarjeta (2, 11, 101); con cualquier otro devuelve `false` y no cambia nada.
+@@ 122-125
+`iq_ganancia()`: devuelve la ganancia actual.
+@@ 127-129
+`iq_fijar_etapas()`: guarda la máscara, quedándose solo con los 5 bits válidos (`& 0x1F`). El *cast* `(uint8_t)` evita un aviso del compilador por la promoción a `int`.
+@@ 130-134
+Si el firmware se compila sin FVR, la normalización no se puede desactivar: sin el FVR no hay forma de conocer los voltios absolutos, así que la ratiométrica es la única escala posible. Se fuerza el bit con `|=`.
+@@ 135-136
+Devuelve las etapas que quedaron activas, para que la UART informe del estado real.
+@@ 138-141
+`iq_etapas()`: devuelve la máscara actual.
+@@ 143-146
+`iq_offset_lsb()`: el offset del ADC en LSB = suma de AVSS / 10 (la media de las 10 conversiones), en `float` para mostrar decimales.
+@@ 148-153
+`iq_fijar_calibracion()`: impone cero y θ (la usa `ajustes.c` al cargar la EEPROM). θ pasa por `fijar_theta()` para recalcular coseno y seno.
+@@ 155-160
+`iq_leer_calibracion()`: devuelve cero y θ escribiendo a través de los punteros.
+@@ 162-165
+`iq_evento()`: añade los eventos a los pendientes con OR. Si llegan varios en el mismo bloque (por ejemplo, botón y orden UART), se acumulan y se aplican juntos al cerrar.
+@@ 167-168
+Criterio de saturación de la sección 10.4: una salida está saturada si su código es menor que el 1.5 % o mayor que el 98.5 % del de VCC_A (a menos de ~55 mV de un riel con VCC_A = 3.65 V). Para no usar coma flotante, 0.015 = 3/200 y 0.985 = 197/200.
+@@ 169-174
+`saturada()`: compara `cx × 200` con `cv × 3` y `cv × 197`, todo en enteros de 32 bits (40950 × 200 = 8.19 millones, y cv × 197 ≤ 16.2 millones con el divisor, ambos caben).
+@@ 176-180
+`restar()`: resta que no baja de 0 (*saturante*). Si el offset de AVSS fuera mayor que una lectura, el resultado sería 0 en vez de dar la vuelta a 65535, que es lo que haría una resta sin signo normal.
+@@ 182-184
+`escalar()`: pasos P1 a P3, de los códigos del ADC a las señales procesadas Ip y Qp en mV.
+@@ 185-188
+**Autocero**: si la etapa está activa, `z` es la suma de AVSS (el offset del ADC, que la hoja de datos acota en ±6 LSB); si no, 0. El comentario explica dónde importa: en I − V_REF y Q − V_REF el offset ya se cancela al restar, pero VCC_A y el FVR se usan como valores absolutos y el offset sí los afecta.
+@@ 189-192
+Resta el offset a I, Q, V_REF y FVR (de forma saturante).
+@@ 193
+Resta el offset a VCC_A y multiplica por `DIVISOR_VCCA` (1, o 2 si hay divisor resistivo), para tener VCC_A en la misma escala que las demás entradas. Se pasa a 32 bits porque con el divisor puede superar 65535.
+@@ 194
+`fvr_ok`: la lectura del FVR está en el rango plausible.
+@@ 195
+`normalizar`: la etapa de normalización está activa.
+@@ 196
+`divisor`: G si la etapa de ganancia está activa; 1 si no.
+@@ 197
+`k`: factor de escala en mV por cuenta, que se calcula a continuación.
+@@ 199
+Guarda la suma de AVSS de esta muestra para `iq_offset_lsb()`.
+@@ 200-205
+Comprueba la saturación de I y Q respecto a VCC_A y lo marca en las banderas del bloque.
+@@ 206-208
+Si la suma cruda de VCC_A está en el máximo, VCC_A ≥ VDD: bandera de saturación de VCC_A.
+@@ 210
+P1: VCC_A en voltios = 1.024 × cV / cF. Como VCC_A y el FVR se miden los dos contra VDD, **VDD se cancela** en el cociente: no hace falta conocer la VDD del PIC.
+@@ 211-213
+Si el FVR es válido, acumula los códigos de VCC_A y del FVR para la media del bloque.
+@@ 214-216
+En la primera muestra desde el arranque, decide si VCC_A es válido: 1.024 × cv > 2.5 × cF equivale a VCC_A > 2.5 V, sin divisiones.
+@@ 217-221
+Si el FVR no es válido y el firmware lo usa, marca la bandera "sin FVR".
+@@ 222
+A partir de aquí ya no es la primera muestra; la decisión de P1 pasa a tomarse con la media de cada bloque.
+@@ 224-225
+P2: cálculo de `k`. Caso normal: normalización activa, VCC_A válido y con una lectura creíble.
+@@ 226-229
+**Fórmula ratiométrica** (sección 10.4): Ip = (cI − cR) / cV × 3.7 V × 1000 / G. Viene de que cada tensión es código × VDD / (10 × 4095): la diferencia (I − V_REF) dividida por VCC_A da un cociente de códigos en el que VDD y el 10 × 4095 se cancelan; multiplicar por 3.7 V refiere la medida a la VCC nominal, por 1000 la pasa a mV y dividir por G deshace la ganancia de la tarjeta. Por eso `k = 3700 / (cv × G)`.
+@@ 230-235
+Si no se puede normalizar: cuando la normalización está pedida y VCC_A se consideraba válido pero la lectura de esta muestra cayó por debajo del mínimo, VCC_A se ha caído dentro del bloque y se marca "VCC_A fuera de rango" ya. En los demás casos, la bandera la decide la media del bloque en `cerrar_bloque()`, igual que en el VI.
+@@ 236-240
+Sin normalizar (etapa desactivada, o VCC_A fuera de rango, donde LabVIEW usa 3.7 V en vez del valor medido, lo que equivale a no normalizar): se dan **voltios absolutos** usando el FVR. Cada tensión vale código × 1.024 / cF, así que `k = 1024 / (cF × G)` mV por cuenta.
+@@ 241-244
+Si tampoco hay FVR, no existe ninguna escala posible: `k = 0` y las señales salen a 0 (con la bandera "sin FVR" ya marcada).
+@@ 246-248
+P3 y la corrección del signo: la tarjeta fabricada entrega I invertido porque los pines 12 y 13 del conmutador analógico 74HC4053 están cruzados (sección 1.3). Se corrige siempre multiplicando I por −k. Si se arregla la tarjeta, basta con quitar el signo menos.
+@@ 249-250
+Señales procesadas: Ip = −k × (cI − cR) y Qp = k × (cQ − cR). Se resta V_REF porque es la "tierra" de la señal (la tarjeta tiene una sola alimentación y centra las señales en VCC_A/2). Los *casts* a `int32_t` permiten que la diferencia sea negativa (con `uint16_t` daría la vuelta).
+@@ 251
+Fin de `escalar()`.
+@@ 253-257
+`cerrar_bloque()`: pasos P1 (media de VCC_A), P4, P5, P7 y P10. Variables para las medias de Ip/Qp (`mI`, `mQ`), sin cero (`mIc`, `mQc`) y finales (`mI1`, `mQ1`). Copia los eventos pendientes a `ev`…
+@@ 259
+…y los borra, para que los que lleguen a partir de ahora vayan al bloque siguiente.
+@@ 261-267
+Una orden de una etapa desactivada no hace nada: si el cero está desactivado se quitan "fijar cero" y "borrar cero"; si θ está desactivado, "calibrar" y "θ = 0". `~` invierte los bits y `&=` los borra.
+@@ 269-271
+P4: medias de las señales procesadas del bloque (suma / 10).
+@@ 273-276
+P1: VCC_A medio del bloque = 1.024 × ΣcV / ΣcF (cociente de sumas, que es la media ponderada correcta) y decisión de validez para el **bloque siguiente**.
+@@ 277-279
+Si la media no supera 2.5 V, bandera "VCC_A fuera de rango" en este bloque (enciende el LED de alarma).
+@@ 280-283
+Si no hubo ninguna lectura válida del FVR, VCC_A en voltios es desconocido (se informa 0) y se sigue con la escala ratiométrica, que no lo necesita.
+@@ 285-289
+P5: "Fijar cero" guarda como cero la media del bloque de Ip, Qp (la sonda debe estar quieta sobre metal sano).
+@@ 290-293
+"Borrar 0" pone el cero a (0, 0). Como va después, si llegan los dos en el mismo bloque manda "Borrar 0", igual que en el VI.
+@@ 295-296
+P7: θ = atan2(media de Qc, media de Ic) en grados, usando el cero recién actualizado (o sin restarlo si la etapa de cero está desactivada). Si en el mismo bloque llega "θ = 0", manda este último.
+@@ 297-305
+"Calibrar θ" (con la sonda sobre papel, es decir, solo lift-off): calcula el ángulo del vector medio sin cero con `atan2f`, que devuelve el ángulo en el cuadrante correcto (−180° a 180°) a partir de sus dos componentes, y lo fija.
+@@ 306-308
+"θ = 0": anula la rotación.
+@@ 310-311
+P6 y P8 sobre las medias: obtiene la media de I′, Q′ del bloque con el cero y θ ya actualizados (válido por la linealidad explicada al principio).
+@@ 312
+P10: |V| = √(I′² + Q′²), el módulo del vector medio en mV.
+@@ 313
+Fase = atan2(Q′, I′) en grados: el ángulo del vector medido desde el eje del lift-off. Una fisura se distingue del despegue de la sonda por esta fase.
+@@ 314
+d estimada = |V| / 4.03: la profundidad relativa de la grieta en unidades de 10⁻⁴, con la calibración "4.03 mV por 10⁻⁴".
+@@ 315-320
+Copia al resultado el cero, θ, las banderas, los eventos realmente aplicados y las etapas activas, para enviarlos por la UART.
+@@ 322-323
+Empieza un bloque nuevo.
+@@ 325-328
+`iq_procesar()`: llamada una vez por trama. Escala la muestra (P1-P3) y calcula I′, Q′ con el cero y θ vigentes (P6, P8).
+@@ 330-331
+P4: acumula Ip y Qp para las medias del bloque.
+@@ 332-334
+Si aún no hay 10 muestras, no se cierra el bloque y devuelve `false`.
+@@ 335-337
+Con la décima muestra cierra el bloque, llena `*b` y devuelve `true`.

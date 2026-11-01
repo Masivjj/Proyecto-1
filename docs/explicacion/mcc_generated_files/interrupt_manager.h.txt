@@ -1,0 +1,15 @@
+# resumen: Macros para habilitar y deshabilitar las interrupciones globales (GIE) y las de periféricos (PEIE), que usan main.c y las secciones críticas de adquisicion.c.
+@@ 1-11
+Cabecera estilo MCC: macros para habilitar o deshabilitar las interrupciones (*Interrupt Module*).
+@@ 13-14
+Guarda de inclusión.
+@@ 17-27
+`INTERRUPT_GlobalInterruptEnable()`: pone a 1 el bit **GIE** (*Global Interrupt Enable*) del registro INTCON. Sin GIE no se atiende ninguna interrupción.
+@@ 29-39
+`INTERRUPT_GlobalInterruptDisable()`: pone GIE a 0. Lo usan `adq_leer()` y `adq_tramas_perdidas()` para leer la cola sin que la interrupción la modifique a la vez (sección crítica). Mientras GIE vale 0 las interrupciones no se pierden: quedan pendientes con su indicador (IF) a 1 y se atienden al volver a habilitarlas.
+@@ 40-50
+`INTERRUPT_PeripheralInterruptEnable()`: pone a 1 **PEIE** (*Peripheral Interrupt Enable*). En el PIC16 las interrupciones de los periféricos (ADC, UART, fallo del oscilador) necesitan GIE y PEIE.
+@@ 52-62
+`INTERRUPT_PeripheralInterruptDisable()`: pone PEIE a 0. El proyecto no la usa.
+@@ 64
+Cierre de la guarda de inclusión.

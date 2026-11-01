@@ -1,0 +1,15 @@
+# resumen: Interfaz de las funciones que convierten números a texto para la UART sin usar printf: redondeo de float a entero escalado y escritura de enteros de 32 bits en decimal.
+@@ 1-7
+Cabecera. Explica por qué existe el módulo: `printf("%f")` en XC8 ocupa mucha memoria de programa y es lento en un PIC de 8 bits, así que los valores se envían como enteros con unidades pequeñas (µV, centésimas de grado). Como no toca el hardware, se prueba en el PC dentro de `tests/test_iq_proc.c`.
+@@ 8-9
+Guarda de inclusión.
+@@ 11
+Tipos enteros de tamaño fijo.
+@@ 13
+`FMT_MAX_CARACTERES` = 11: lo más largo que puede ocupar un entero de 32 bits con signo en decimal, "-2147483648" (signo y 10 dígitos). Los buffers locales de `comunicacion.c` tienen este tamaño.
+@@ 15-16
+`fmt_a_entero(x, escala)`: devuelve `x × escala` redondeado al entero más próximo, limitado a ±2 000 000 000 para que nunca desborde un `int32_t`.
+@@ 18-21
+`fmt_u32` y `fmt_i32`: escriben el número en decimal en `dst`, sin el terminador `'\0'` de las cadenas C, y devuelven cuántos caracteres escribieron (como mucho 11).
+@@ 23
+Cierre de la guarda de inclusión.

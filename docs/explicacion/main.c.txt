@@ -1,0 +1,103 @@
+# resumen: Punto de entrada del firmware. Inicializa el hardware y los módulos, habilita las interrupciones y entra en el lazo principal, que no muestrea: solo procesa las tramas de 10 ms que la interrupción del ADC deja en una cola, y atiende pulsadores, UART, EEPROM y LED.
+@@ 1-8
+Comentario de cabecera del archivo. Dice qué es el proyecto: un **detector de fisuras en aluminio por corrientes de Eddy** que procesa las dos componentes de continua **I** (en fase) y **Q** (en cuadratura) que entrega la tarjeta demoduladora **P2**, usando un **PIC16F18426**. Nombra las herramientas: MPLAB X (entorno), XC8 (compilador de C para PIC de 8 bits) y MCC Classic (el generador de código de periféricos de Microchip). La línea 6 aclara el objetivo funcional: reproducir en el PIC el procesamiento que hacía el VI de LabVIEW `P2_IQ_SINAD.vi`, descrito en la especificación `docs/P2_IQ_procesamiento_para_PIC16F18426.md`.
+@@ 9-13
+Explica la decisión central de la arquitectura: **el muestreo no lo hace el lazo principal**. El ADC está en modo básico y cada conversión la arranca por hardware el flanco del PWM6, cada 100 µs. La interrupción del ADC agrupa los disparos en rondas de 1 ms en las que cada entrada se convierte exactamente una vez, así que cada canal se muestrea a **1000 muestras/s**, como el DAQ del VI. En cada trama se suman 10 conversiones por canal. Así el instante de muestreo no depende de lo que esté haciendo el software (no hay jitter por software).
+@@ 14-19
+Resume qué hace el lazo con cada trama de 10 ms: (1) calcula las señales procesadas Ip, Qp y las finales I′, Q′ (`iq_proc.c`); (2) guarda el punto (I′, Q′) en la traza del plano polar (`traza.c`) y envía la muestra por la UART (`comunicacion.c`); (3) cada 10 muestras, es decir cada 0.1 s, cierra un **bloque**: aplica cero y θ y calcula los indicadores |V|, Fase y d; (4) atiende pulsadores, órdenes, EEPROM y LED.
+@@ 20-23
+Explica por qué el sistema tolera retrasos del lazo: si un cálculo largo (por ejemplo "Calibrar θ", que usa `atan2`, `sin` y `cos` en coma flotante por software) tarda más de 10 ms, las tramas esperan en una cola. Las muestras ya se tomaron a su hora; solo se perderían si se llenara la cola (`N_COLA_TRAMAS` = 4 tramas = 40 ms de margen).
+@@ 24-27
+Documenta la opción de reloj: por defecto el oscilador interno HFINTOSC a 32 MHz; con la opción `RELOJ` (en `app/app_config.h`) se usa un cristal u oscilador externo de 4 MHz multiplicado ×4 por el PLL (16 MHz), con el HFINTOSC a 16 MHz como reserva si el externo falta o falla (`reloj.c`).
+@@ 28-31
+Describe el comportamiento del LED de estado: un destello de 50 ms cada segundo ("latido") cuando todo está bien, y encendido fijo si el último bloque tuvo una alarma (VCC_A fuera de rango o alguna salida saturada). El LED está en RA5 con reloj interno y en RA0 con reloj externo, porque RA5 pasa a ser la entrada del oscilador. La línea 31 cierra el comentario.
+@@ 33
+Incluye `mcc.h`, la cabecera "paraguas" de MCC: trae `<xc.h>` (los registros del PIC), los tipos `stdint`/`stdbool` y las cabeceras de todos los drivers (pines, ADC, UART, TMR2, PWM6, FVR, EEPROM, interrupciones) y declara `SYSTEM_Initialize()`.
+@@ 34-40
+Incluye las cabeceras de los módulos de la aplicación, en orden alfabético: adquisición (ADC y cola de tramas), ajustes (EEPROM), botones, comunicación (UART), procesamiento I/Q, reloj y traza. Con eso `main.c` conoce las funciones y tipos que usa, pero no sus detalles internos.
+@@ 42-43
+Constantes del LED, medidas en tramas porque `led_tarea()` se llama una vez por trama (cada 10 ms): `LED_PERIODO_TRAMAS` = 100 tramas = 1 s entre destellos; `LED_ENCENDIDO_TRAMAS` = 5 tramas = 50 ms encendido. El sufijo `u` hace que la constante sea sin signo, para comparar sin avisos con variables `uint8_t`.
+@@ 45
+`banderas_lazo`: banderas que detecta el propio lazo principal (no `iq_proc.c`) y que se añaden al siguiente bloque. Hoy solo `IQ_FL_RETRASO` (se perdieron tramas). Es `static` a nivel de archivo: solo visible en `main.c`, y el arranque de C la pone a 0.
+@@ 46
+`alarma`: recuerda si el último bloque cerrado tuvo alguna bandera de alarma; la usa `led_tarea()` para dejar el LED encendido fijo. `bool` viene de `<stdbool.h>`.
+@@ 48-50
+Función `led_tarea()`, privada del archivo (`static`). `fase` es una variable `static` **local**: conserva su valor entre llamadas (vive en RAM fija, no en la pila) y empieza en 0. Cuenta tramas dentro del periodo de 1 s.
+@@ 52-54
+Avanza la fase y, al llegar a 100, vuelve a 0: un contador módulo 100. `++fase` incrementa antes de comparar.
+@@ 55-59
+Decide el estado del LED: encendido si hay alarma **o** si estamos en las 5 primeras tramas del segundo (el destello); apagado en el resto. `LED_SetHigh()`/`LED_SetLow()` son macros de `pin_manager.h` que escriben el bit del registro LAT del pin del LED (RA5 o RA0 según el reloj).
+@@ 60
+Fin de `led_tarea()`.
+@@ 62
+`atender_muestra()`: procesa una trama completa. Recibe un puntero `const` a los códigos del ADC de la trama (sumas de 10 conversiones por canal; `const` garantiza que la función no los modifica), el instante de la muestra en ms y el número de muestras perdidas (para el mensaje de estado).
+@@ 63-67
+Variables locales: `m` recibirá los resultados de la muestra (Ip, Qp, I′, Q′), `b` los del bloque si se cierra, `fin_bloque` indica si se cerró un bloque y `ev` los eventos de los pulsadores.
+@@ 69
+Llama al procesamiento (`iq_proc.c`): convierte los códigos en milivoltios normalizados, aplica ganancia, cero y θ, acumula para el bloque y devuelve `true` cuando esta es la décima muestra y el bloque se ha cerrado (entonces `b` está lleno).
+@@ 71-75
+Añade el punto (I′, Q′) a la traza circular del plano polar, salvo en dos casos: mientras se está volcando la traza por la UART (orden `p`, para que no cambie mientras se envía) y mientras la memoria de la traza está prestada a una captura `m` (las dos comparten RAM).
+@@ 76
+Envía la línea de la muestra por la UART: `t_ms,Ip_uV,Qp_uV,I1_uV,Q1_uV`.
+@@ 78-81
+Si se cerró un bloque y entre sus eventos está "borrar traza" (orden `b` o efecto de fijar cero), vacía la traza. Los eventos se aplican al cerrar el bloque, como los botones *latch* del VI.
+@@ 82-84
+Si en este bloque se fijó el cero o se calibró θ (`IQ_EV_CALIBRACION`), guarda la calibración en la EEPROM. `ajustes_guardar()` no escribe en el momento: prepara los datos y `ajustes_tarea()` los graba byte a byte sin bloquear.
+@@ 85
+Añade al bloque las banderas detectadas por el lazo (retraso: tramas perdidas). El operador `|=` hace un OR bit a bit.
+@@ 86-88
+Si el reloj externo de 4 MHz falló y el PIC funciona con el oscilador interno de reserva, marca la bandera `IQ_FL_RELOJ` (64) en cada bloque, para que el PC lo vea.
+@@ 89
+Borra las banderas del lazo: ya se han comunicado en este bloque.
+@@ 90
+Actualiza el estado de alarma con las banderas del bloque: `IQ_FL_ALARMA` agrupa VCC_A fuera de rango, saturación de I o Q y VCC_A ≥ VDD. El resultado `(... != 0u)` es un booleano.
+@@ 91
+Envía la línea del bloque por la UART: `B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas`.
+@@ 92
+Fin del tratamiento del cierre de bloque.
+@@ 94-96
+Pregunta al módulo de reloj si el reloj externo se acaba de parar (el fallo lo atendió ya la interrupción OSFIF, que devolvió el PIC a 16 MHz). Si es así, envía una vez el aviso por la UART. Con reloj interno `reloj_tarea()` siempre devuelve `false`.
+@@ 97-101
+Lee los pulsadores con antirrebote (se llama cada 10 ms, que es el periodo de muestreo de los botones). Si hay una pulsación nueva, la pasa al procesamiento como evento (`iq_evento`: fijar cero o calibrar θ, que se aplicarán al cerrar el bloque) y la anuncia por la UART (`# boton: ...`).
+@@ 102
+Tarea de comunicación: lee las órdenes que hayan llegado por la UART y, si hay algo pendiente, envía una línea del mensaje de estado, un punto del volcado de la traza o una línea de la captura. Se envía como mucho una línea larga por trama para no saturar la UART.
+@@ 103
+Tarea de la EEPROM: si hay una escritura pendiente y la anterior terminó, escribe el siguiente byte. Una escritura de EEPROM tarda milisegundos; así no se bloquea el lazo.
+@@ 104
+Actualiza el LED (una vez por trama, por eso las constantes del LED se miden en tramas).
+@@ 105
+Fin de `atender_muestra()`.
+@@ 107-109
+Comentario que deja MCC Classic sobre la función principal ("Main application"); se ha conservado.
+@@ 110
+`main()`. En XC8 para PIC de 8 bits se declara `void main(void)` porque no hay sistema operativo al que devolver un valor; el programa no termina nunca.
+@@ 111-117
+Variables de `main`: `cargados` dice si la EEPROM tenía ajustes válidos; `c` recibe los códigos de cada trama; `trama` su número (1, 2, 3…); `perdidas` el número de tramas perdidas ya comunicado; `perdidas_inicio` las perdidas durante el arranque (no cuentan); `perdidas_ahora` el valor actual. Son de 32 bits para que no desborden en la práctica (2³² tramas de 10 ms son más de 16 meses).
+@@ 119-120
+Inicializa el hardware con el código de MCC (`mcc.c`): módulos habilitados (PMD), pines, oscilador, FVR, TMR2, PWM6, ADC y EUSART. Desde aquí el TMR2 y el PWM6 ya corren y disparan el ADC, pero sin interrupciones habilitadas nadie recoge los resultados todavía.
+@@ 121
+Con reloj externo, pasa del oscilador interno al cristal/oscilador de 4 MHz con PLL ×4, esperando hasta 100 ms (`reloj.c`). Va justo después de `SYSTEM_Initialize()` y antes de todo lo que dependa del tiempo. Con reloj interno no hace nada.
+@@ 123
+Pone el procesamiento en su estado inicial: ganancia inicial, etapas por defecto, cero y θ a 0.
+@@ 124
+Carga de la EEPROM la ganancia, el cero, θ y las etapas guardados, si son válidos (comprueba la suma de verificación). Va después de `iq_inicializar()` para sobrescribir los valores por defecto. Devuelve si se cargaron.
+@@ 125
+Configura la adquisición: modo básico del ADC con disparo PWM6, secuencia de canales, interrupción del ADC (ADIE) y, en producción, la salida del PWM6 por RA1. Espera a que el FVR esté listo.
+@@ 127-128
+Habilita las interrupciones globales (bit GIE de INTCON). Es una macro de MCC.
+@@ 130-131
+Habilita las interrupciones de periféricos (bit PEIE). En el PIC16 el ADC y la EUSART son periféricos: sin PEIE no interrumpen. Desde este momento la interrupción del ADC empieza a llenar la cola de tramas.
+@@ 133
+Envía por la UART el mensaje de bienvenida: estado de la EEPROM y las líneas del mensaje de estado (versión, ADC, reloj, configuración, formato de las líneas y órdenes).
+@@ 134-136
+El mensaje de bienvenida ocupa unos 750 caracteres, unos 65 ms a 115200 baudios (11 520 caracteres por segundo). (cifra medida con el simulador). Como `EUSART1_Write` espera cuando el buffer de transmisión está lleno, durante ese tiempo pueden perderse tramas (la cola solo guarda 40 ms). Se guarda cuántas se perdieron para no contarlas como un retraso real.
+@@ 138-139
+Lazo infinito: el firmware nunca sale de aquí. Todo lo demás ocurre en las interrupciones o en `atender_muestra()`.
+@@ 140
+Intenta sacar una trama de la cola. `adq_leer()` no espera: devuelve `false` si no hay ninguna. El lazo da vueltas sin hacer nada hasta que la interrupción del ADC termina la siguiente trama.
+@@ 141-146
+Calcula cuántas tramas se perdieron desde el arranque. Si el número aumentó desde la última vez, la cola se llenó en algún momento (el lazo se retrasó más de 40 ms): se actualiza el contador y se marca la bandera `IQ_FL_RETRASO`, que irá en el próximo bloque (en el PC aparece "se descartaron muestras"). La resta de enteros sin signo funciona aunque el contador dé la vuelta.
+@@ 147
+Procesa la trama. El instante en ms es el número de trama × `PERIODO_MS` (10 ms): la base de tiempo la da el hardware (TMR2), no el reloj del lazo, y sigue contando aunque se pierdan tramas.
+@@ 148-150
+Cierre del `if`, del `while` y de `main()`.

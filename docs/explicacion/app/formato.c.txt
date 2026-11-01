@@ -1,0 +1,33 @@
+# resumen: Convierte números a texto decimal de forma rápida en un PIC sin divisor por hardware: redondeo seguro de float a entero y conversión de enteros por restas sucesivas de potencias de 10.
+@@ 1-6
+Cabecera. El PIC16 no tiene instrucción de división: dividir un número de 32 bits por 10 es una rutina de software larga. En lugar de dividir por 10 para sacar cada dígito, se restan potencias de 10, que en este caso es mucho más rápido.
+@@ 7-8
+`stdbool` y la cabecera propia.
+@@ 10
+`LIMITE_ENTERO` = 2 000 000 000 (con `L`, tipo `long` de 32 bits): el valor máximo que devuelve `fmt_a_entero`, por debajo del máximo de un `int32_t` (2 147 483 647).
+@@ 12-15
+Tabla de potencias de 10 desde 10⁹ hasta 10 (9 valores), `static const` para que quede en la memoria de programa. El sufijo `UL` marca enteros sin signo de 32 bits.
+@@ 17-19
+`fmt_a_entero()`: multiplica por la escala (por ejemplo 1000 para pasar de mV a µV).
+@@ 21-23
+Protección contra **NaN** (*not a number*, por ejemplo resultado de 0/0): es el único valor de coma flotante que no es igual a sí mismo, así que `y != y` lo detecta. Se devuelve 0 para no enviar basura.
+@@ 24-29
+Satura a ±2 000 000 000: convertir a entero un `float` fuera del rango de `int32_t` tiene comportamiento indefinido en C.
+@@ 30-31
+Redondeo al más próximo (las mitades se alejan de cero): se suma 0.5 a los positivos y se resta a los negativos antes de truncar, porque el *cast* a entero trunca hacia cero.
+@@ 33-38
+`fmt_u32()`: `n` cuenta los caracteres escritos, `i` recorre las potencias, `p` es la potencia actual y `digito` el carácter que se construye.
+@@ 40-42
+Para cada potencia de 10, de la mayor a la menor, empieza con el dígito `'0'`…
+@@ 43-46
+… y mientras el número sea mayor o igual que la potencia, la resta y sube el dígito. El número de restas es el dígito de esa posición (como mucho 9 por posición, 81 restas en total para un número de 10 cifras, mucho menos que 9 divisiones de 32 bits).
+@@ 47-50
+Solo escribe el dígito si no es un cero a la izquierda: o es distinto de `'0'`, o ya se escribió algún dígito antes.
+@@ 51
+Lo que queda en `v` es el dígito de las unidades (0-9); siempre se escribe, así que el número 0 da "0".
+@@ 52-53
+Devuelve cuántos caracteres escribió.
+@@ 55-61
+`fmt_i32()`: si el número es negativo escribe `-` y convierte el valor absoluto. Calcularlo como `−(v + 1) + 1` evita el desborde con el valor más negativo, −2 147 483 648, cuyo opuesto no cabe en un `int32_t` (pero sí en un `uint32_t` después de sumar 1). Devuelve 1 + los dígitos.
+@@ 62-63
+Si no es negativo, lo convierte directamente como sin signo.

@@ -1,0 +1,25 @@
+# resumen: Interfaz pública del módulo de adquisición: inicializar el ADC, sacar tramas de la cola, contar las perdidas y gestionar la captura de la orden m. Es lo único que el resto del programa ve de cómo se muestrea.
+@@ 1-5
+Comentario de cabecera: el módulo hace las conversiones del ADC disparadas por hardware (el PWM6), con un jitter de muestreo limitado al del oscilador, y muestrea cada entrada a 1000 muestras/s (una conversión por canal en cada ronda de 1 ms). Remite al análisis `docs/analisis_adc_jitter.md`.
+@@ 6-7
+Guarda de inclusión (evita que la cabecera se procese dos veces).
+@@ 9-11
+Cabeceras necesarias para compilar las declaraciones: `bool` (stdbool), `uint16_t`/`uint32_t` (stdint) y el tipo `iq_codigos_t` de `iq_proc.h`, que es la estructura donde se entregan los códigos de cada trama.
+@@ 13-16
+`adq_inicializar()`: configura el ADC en modo básico con disparo `PWM6_out`, prepara la secuencia de canales y, si está activada la opción `SALIDA_DISPARO`, saca el PWM6 por RA1. Debe llamarse después de `SYSTEM_Initialize()` (que configura los periféricos) y antes de habilitar las interrupciones (para que la primera interrupción encuentre el estado listo).
+@@ 18-21
+`adq_leer()`: saca de la cola la trama más antigua. Devuelve los códigos (cada uno es la suma de `N_SOBREMUESTREO` = 10 conversiones del canal) y el número de trama (1, 2, 3…, una cada 10 ms desde el arranque). Devuelve `false` si la cola está vacía; no espera. Los parámetros son punteros porque la función escribe en variables del llamador.
+@@ 23-25
+`adq_tramas_perdidas()`: cuántas tramas se descartaron porque la cola estaba llena, es decir, porque `main` iba más de 4 tramas (40 ms) por detrás.
+@@ 27-30
+Explica la captura de la orden `m`: copia `n` conversiones seguidas de I_OUT, una por ronda (cada 1 ms), para medir el SNR y el jitter. Empieza con la trama siguiente, dura `n` ms y no detiene las tramas normales. Si ya hay una captura sin liberar, `adq_pedir_captura` devuelve `false`.
+@@ 31
+`adq_pedir_captura(buffer, n)`: pide la captura en el buffer dado (de al menos `n` valores de 16 bits).
+@@ 32
+`adq_captura_lista()`: `true` cuando el buffer ya está lleno y se puede enviar.
+@@ 33
+`adq_liberar_captura()`: se llama cuando ya se envió el buffer; vuelve al estado sin captura.
+@@ 34
+`adq_capturando()`: `true` mientras haya una captura pedida, en curso o lista sin liberar. `main.c` lo usa para no tocar la traza, cuya memoria está prestada al buffer de la captura.
+@@ 36
+Cierre de la guarda de inclusión.

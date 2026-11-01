@@ -29,7 +29,7 @@
 #include "app_config.h"
 
 /* Codigos sobremuestreados de una muestra. Cada uno es la SUMA de
- * N_SOBREMUESTREO conversiones de 12 bits (0..65520), todas contra VDD. */
+ * N_SOBREMUESTREO = 10 conversiones de 12 bits (0..40950), todas contra VDD. */
 typedef struct {
     uint16_t cI;        /* I_OUT  (J805.1) */
     uint16_t cQ;        /* Q_OUT  (J805.3) */

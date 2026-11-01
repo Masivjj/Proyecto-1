@@ -1,0 +1,13 @@
+# resumen: Driver del FVR: lo enciende con 1.024 V hacia el ADC y permite comprobar cuándo está estable.
+@@ 1-11
+Cabecera estilo MCC.
+@@ 13-15
+Comentario de sección.
+@@ 17-18
+Registros y cabecera del driver.
+@@ 20-22
+Comentario de sección.
+@@ 24-28
+`FVR_Initialize()`: `FVRCON` = 0x81 = binario 1000 0001: FVREN = 1 (enciende la referencia) y ADFVR = 01 (ganancia 1× hacia el ADC: 1.024 V). El buffer de comparadores/DAC (CDAFVR) y el sensor de temperatura (TSEN) quedan apagados. El comentario de MCC lista cada campo.
+@@ 30-33
+`FVR_IsOutputReady()`: devuelve el bit FVRRDY, que el hardware pone a 1 cuando la referencia está estable (unos 60 µs después de encenderla, parámetro FVR04).

@@ -1,0 +1,33 @@
+# resumen: Lectura y escritura de un byte de la EEPROM, generadas por MCC. La escritura de MCC deja las interrupciones deshabilitadas durante los 4-5 ms que tarda, lo que pararía el muestreo; por eso el proyecto solo usa la lectura y escribe con ajustes.c.
+@@ 1-11
+Cabecera estilo MCC.
+@@ 13-15
+Comentario de sección.
+@@ 17-18
+Registros (`<xc.h>`, que también define `NOP()`) y cabecera del driver.
+@@ 20-22
+Comentario de sección.
+@@ 24-26
+`DATAEE_WriteByte()`. Guarda el estado de GIE para restaurarlo al final.
+@@ 28-30
+Dirección de 16 bits repartida en NVMADRH y NVMADRL, y el dato en NVMDATL.
+@@ 31-32
+NVMREGS = 1 (espacio de la EEPROM y la configuración, no la Flash de programa) y WREN = 1 (habilita escribir).
+@@ 33
+Deshabilita las interrupciones: la secuencia de desbloqueo no puede interrumpirse.
+@@ 34-36
+Secuencia de desbloqueo: 0x55 y 0xAA en NVMCON2, y WR = 1 para empezar la grabación (sección 6.4.2 de la hoja de datos).
+@@ 37-40
+**Espera** a que el hardware termine (WR vuelve a 0), con las interrupciones aún deshabilitadas. Son 4-5 ms (parámetro MEM24) en los que no se atendería la interrupción del ADC: se perderían unas 40-50 conversiones y el reparto de canales de la ronda se desordenaría. Por eso `ajustes.c` tiene su propia `iniciar_escritura()`, que hace la misma secuencia pero rehabilita las interrupciones enseguida y no espera.
+@@ 42-44
+Quita el permiso de escritura y restaura GIE.
+@@ 46-47
+`DATAEE_ReadByte()`.
+@@ 48-49
+Dirección del byte.
+@@ 50-51
+NVMREGS = 1 (espacio de la EEPROM) y RD = 1 (inicia la lectura, que tarda un ciclo de instrucción).
+@@ 52-53
+Dos instrucciones `NOP` (no hacer nada) para dar tiempo a que el dato esté listo a frecuencias altas, como recomienda MCC.
+@@ 55-56
+Devuelve el byte leído (NVMDATL).

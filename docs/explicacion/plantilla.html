@@ -1,0 +1,292 @@
+<title>Firmware P2 IQ explicado</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Misma hoja de plano que los esquemas del proyecto: papel frío, tinta pizarra, azul de cable para el código, cobre para lo resaltado.
+   Dos columnas: índice de archivos fijo a la izquierda; a la derecha, cada bloque de líneas con su explicación al lado. */
+:root {
+  --bg: #f2f4f3; --paper: #fbfcfc; --ink: #1b2422; --muted: #5b6764; --line: #d5dcd9;
+  --wire: #1f5a85; --acc: #b5651d; --acc-soft: #f6e8da; --code-bg: #f4f6f5;
+  --c-com: #6b7a76; --c-pre: #7a4a9a; --c-kw: #1f5a85; --c-str: #2f7a45; --c-num: #a2541a;
+  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111615; --paper: #171d1c; --ink: #dce4e1; --muted: #93a19d; --line: #2c3633;
+    --wire: #79b6e3; --acc: #e5a25c; --acc-soft: #3a2a19; --code-bg: #131917;
+    --c-com: #7f8d89; --c-pre: #c9a0e8; --c-kw: #79b6e3; --c-str: #8fd19e; --c-num: #e5a25c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111615; --paper: #171d1c; --ink: #dce4e1; --muted: #93a19d; --line: #2c3633;
+  --wire: #79b6e3; --acc: #e5a25c; --acc-soft: #3a2a19; --code-bg: #131917;
+  --c-com: #7f8d89; --c-pre: #c9a0e8; --c-kw: #79b6e3; --c-str: #8fd19e; --c-num: #e5a25c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 56px;
+}
+a { color: var(--wire); }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--wire); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 1.8rem; font-weight: 700; }
+h2 { font-size: 1.2rem; font-weight: 600; }
+p { margin: 0; }
+.mono, code { font-family: var(--font-mono); font-size: 0.88em; }
+code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.page { max-width: 1320px; margin: 0 auto; display: grid; gap: 22px; }
+header.top { display: grid; gap: 10px; }
+header.top p { max-width: 80ch; color: var(--muted); }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--font-mono); font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--ink); font-weight: 600; }
+.layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+/* Índice */
+nav.indice { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); overflow-y: auto;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 12px; display: grid; gap: 10px; align-content: start; }
+@media (max-width: 900px) { nav.indice { position: static; max-height: none; } }
+.buscar { display: grid; gap: 4px; }
+.buscar label { font-size: 0.78rem; color: var(--muted); }
+.buscar input { font: 0.92rem var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; width: 100%; }
+details.grupo summary { cursor: pointer; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 4px 0; }
+details.grupo ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 1px; }
+.indice a.f { display: flex; justify-content: space-between; gap: 8px; text-decoration: none; color: var(--ink); font-family: var(--font-mono); font-size: 0.82rem; padding: 3px 6px; border-radius: 3px; }
+.indice a.f span.n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.indice a.f:hover { background: var(--code-bg); }
+.indice a.f[aria-current="page"] { background: var(--acc-soft); color: var(--ink); box-shadow: inset 2px 0 0 var(--acc); }
+.indice a.inicio { font-family: var(--font-body); font-weight: 600; }
+/* Vista */
+main.vista { min-width: 0; display: grid; gap: 18px; }
+.intro-sec { display: grid; gap: 10px; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; }
+.intro-sec p { max-width: 80ch; }
+ol.recorrido { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; counter-reset: paso; }
+ol.recorrido li { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 12px; counter-increment: paso; }
+ol.recorrido li .t { font-family: var(--font-mono); font-size: 0.82rem; color: var(--acc); padding-top: 2px; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { ol.recorrido li { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td:first-child { font-family: var(--font-mono); font-size: 0.86rem; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+dl.glosario { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 22px; }
+dl.glosario div { min-width: 0; }
+dl.glosario dt { font-weight: 600; }
+dl.glosario dd { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.cab-archivo { display: grid; gap: 8px; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; }
+.cab-archivo h2 { font-family: var(--font-mono); font-size: 1.15rem; word-break: break-all; }
+.cab-archivo p { max-width: 85ch; }
+.cab-archivo .meta { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
+.bloques { display: grid; gap: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.bloque { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); border-top: 1px solid var(--line); }
+.bloque:first-child { border-top: 0; }
+@media (max-width: 1100px) { .bloque { grid-template-columns: minmax(0, 1fr); } }
+.bloque.marcado { box-shadow: inset 3px 0 0 var(--acc); background: var(--acc-soft); }
+.codigo { background: var(--code-bg); overflow-x: auto; min-width: 0; border-right: 1px solid var(--line); }
+@media (max-width: 1100px) { .codigo { border-right: 0; border-bottom: 1px solid var(--line); } }
+.codigo pre { margin: 0; padding: 10px 0; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.5; }
+.codigo .l { display: block; padding-right: 14px; white-space: pre; }
+.codigo .num { display: inline-block; width: 3.6em; padding-right: 1em; text-align: right; color: var(--muted); user-select: none; font-variant-numeric: tabular-nums; }
+.c-com { color: var(--c-com); font-style: italic; }
+.c-pre { color: var(--c-pre); }
+.c-kw { color: var(--c-kw); font-weight: 600; }
+.c-str { color: var(--c-str); }
+.c-num { color: var(--c-num); }
+.texto { padding: 10px 16px 12px; display: grid; gap: 8px; align-content: start; min-width: 0; font-size: 0.93rem; }
+.texto .rango { font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.texto ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.pie-archivo { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pie-archivo a { font-family: var(--font-mono); font-size: 0.85rem; text-decoration: none; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); }
+.resultados { display: grid; gap: 6px; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; }
+.resultados ol { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; }
+.resultados .donde { font-family: var(--font-mono); font-size: 0.82rem; }
+.resultados .frag { color: var(--muted); font-size: 0.88rem; display: block; overflow-wrap: anywhere; }
+.resultados mark { background: var(--acc-soft); color: var(--ink); }
+@media (prefers-reduced-motion: no-preference) { .bloque.marcado { transition: background-color .4s; } }
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="eyebrow">Detector de fisuras por corrientes de Eddy · PIC16F18426 · firmware 1.4</div>
+    <h1>El firmware explicado línea a línea</h1>
+    <p>Todo el código de <span class="mono">P2_IQ_PIC16F18426.X</span>, archivo por archivo, con la explicación de cada línea o grupo de líneas al lado. Un programa comprueba que no queda ninguna línea con contenido sin explicar. Empieza por la introducción o elige un archivo; el orden del índice es el recomendado para estudiarlo.</p>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="layout">
+    <nav class="indice" aria-label="Archivos">
+      <div class="buscar">
+        <label for="q">Buscar en el código y en las explicaciones</label>
+        <input id="q" type="search" placeholder="p. ej. ADPCH, volatile, theta" autocomplete="off">
+      </div>
+      <a class="f inicio" href="#inicio" id="nav-inicio">Introducción</a>
+      <div id="grupos"></div>
+    </nav>
+
+    <main class="vista" id="vista">
+      <div id="intro">
+<!--INTRODUCCION-->
+      </div>
+      <div id="archivo" hidden></div>
+      <div id="busqueda" hidden></div>
+    </main>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var DATOS = /*DATOS*/null;
+  var archivos = DATOS.archivos;
+  var porSlug = {};
+  function slug(ruta) { return ruta.toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
+  archivos.forEach(function (a, i) { a.slug = slug(a.ruta); a.indice = i; porSlug[a.slug] = a; });
+
+  /* ---- Resaltado de C (comentarios de varias líneas, preprocesador, cadenas, palabras clave, números) ---- */
+  var KW = /\b(void|char|int|unsigned|signed|short|long|float|double|bool|true|false|uint8_t|uint16_t|uint32_t|int32_t|uint24_t|__uint24|static|const|volatile|extern|typedef|struct|union|enum|if|else|while|for|do|switch|case|default|break|return|sizeof|__interrupt)\b/g;
+  var NUM = /\b(0x[0-9A-Fa-f]+[uUlL]*|\d+\.\d+f?|\d+[uUlL]*)\b/g;
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function codigoPlano(s, pre) {
+    var e = esc(s);
+    if (pre) return '<span class="c-pre">' + e + "</span>";
+    return e.replace(/(&[a-z]+;)|\b(0x[0-9A-Fa-f]+[uUlL]*|\d+\.\d+f?|\d+[uUlL]*)\b|\b([A-Za-z_]\w*)\b/g, function (m, ent, num, id) {
+      if (ent) return ent;
+      if (num) return '<span class="c-num">' + num + "</span>";
+      KW.lastIndex = 0;
+      return KW.test(id) ? '<span class="c-kw">' + id + "</span>" : id;
+    });
+  }
+  function resaltar(lineas) {
+    var enCom = false, out = [];
+    lineas.forEach(function (ln) {
+      var html = "", i = 0, pre = /^\s*#/.test(ln) && !enCom;
+      while (i < ln.length) {
+        if (enCom) {
+          var f = ln.indexOf("*/", i);
+          if (f < 0) { html += '<span class="c-com">' + esc(ln.slice(i)) + "</span>"; i = ln.length; }
+          else { html += '<span class="c-com">' + esc(ln.slice(i, f + 2)) + "</span>"; i = f + 2; enCom = false; }
+          continue;
+        }
+        var resto = ln.slice(i), m = resto.match(/\/\*|\/\/|"|'/);
+        if (!m) { html += codigoPlano(resto, pre); break; }
+        html += codigoPlano(resto.slice(0, m.index), pre);
+        i += m.index;
+        if (m[0] === "/*") { enCom = true; html += '<span class="c-com">/*</span>'; i += 2; }
+        else if (m[0] === "//") { html += '<span class="c-com">' + esc(ln.slice(i)) + "</span>"; i = ln.length; }
+        else {
+          var q = m[0], j = i + 1;
+          while (j < ln.length && ln[j] !== q) { j += ln[j] === "\\" ? 2 : 1; }
+          html += '<span class="c-str">' + esc(ln.slice(i, j + 1)) + "</span>"; i = j + 1;
+        }
+      }
+      out.push(html);
+    });
+    return out;
+  }
+
+  /* ---- Índice ---- */
+  var grupos = document.getElementById("grupos");
+  var porGrupo = {};
+  archivos.forEach(function (a) { (porGrupo[a.grupo] = porGrupo[a.grupo] || []).push(a); });
+  Object.keys(porGrupo).forEach(function (g) {
+    var d = document.createElement("details"); d.className = "grupo"; d.open = true;
+    var s = document.createElement("summary"); s.textContent = g; d.appendChild(s);
+    var ul = document.createElement("ul");
+    porGrupo[g].forEach(function (a) {
+      var li = document.createElement("li"), l = document.createElement("a");
+      l.className = "f"; l.href = "#" + a.slug; l.dataset.slug = a.slug;
+      l.innerHTML = "<span>" + esc(a.ruta.replace(/^.*\//, "")) + '</span><span class="n">' + a.lineas + "</span>";
+      li.appendChild(l); ul.appendChild(li);
+    });
+    d.appendChild(ul); grupos.appendChild(d);
+  });
+  document.getElementById("stats").innerHTML =
+    "<span><b>" + archivos.length + "</b> archivos</span><span><b>" + DATOS.lineas.toLocaleString("es") +
+    "</b> líneas</span><span><b>" + DATOS.bloques.toLocaleString("es") + "</b> explicaciones</span><span><b>0</b> líneas sin explicar</span>";
+
+  /* ---- Vista de un archivo ---- */
+  var vistaIntro = document.getElementById("intro"), vistaArch = document.getElementById("archivo"), vistaBus = document.getElementById("busqueda");
+  function mostrar(cual) { vistaIntro.hidden = cual !== "intro"; vistaArch.hidden = cual !== "archivo"; vistaBus.hidden = cual !== "busqueda"; }
+  function marcarIndice(s) {
+    document.querySelectorAll(".indice a.f").forEach(function (l) {
+      if ((l.dataset.slug || "inicio") === s) l.setAttribute("aria-current", "page"); else l.removeAttribute("aria-current");
+    });
+  }
+  function pintarArchivo(a, lineaDestino) {
+    var col = resaltar(a.codigo), h = [];
+    h.push('<div class="cab-archivo"><div class="eyebrow">' + esc(a.grupo) + '</div><h2>' + esc(a.ruta) + "</h2><p>" + a.resumen +
+           '</p><div class="meta">' + a.lineas + " líneas · " + a.bloques.length + " explicaciones</div></div>");
+    h.push('<div class="bloques">');
+    a.bloques.forEach(function (b, k) {
+      var cod = [];
+      for (var n = b.a; n <= b.b; n++) cod.push('<span class="l"><span class="num">' + n + "</span>" + (col[n - 1] || "") + "</span>");
+      h.push('<div class="bloque" id="b-' + k + '" data-a="' + b.a + '" data-b="' + b.b + '"><div class="codigo"><pre>' + cod.join("") +
+             '</pre></div><div class="texto"><div class="rango">' + (b.a === b.b ? "línea " + b.a : "líneas " + b.a + "–" + b.b) +
+             "</div>" + b.html + "</div></div>");
+    });
+    h.push("</div>");
+    var ant = archivos[a.indice - 1], sig = archivos[a.indice + 1];
+    h.push('<div class="pie-archivo">' + (ant ? '<a href="#' + ant.slug + '">← ' + esc(ant.ruta) + "</a>" : "<span></span>") +
+           (sig ? '<a href="#' + sig.slug + '">' + esc(sig.ruta) + " →</a>" : "") + "</div>");
+    vistaArch.innerHTML = h.join("");
+    mostrar("archivo"); marcarIndice(a.slug);
+    if (lineaDestino) {
+      var dest = Array.prototype.find.call(vistaArch.querySelectorAll(".bloque"), function (el) {
+        return +el.dataset.a <= lineaDestino && lineaDestino <= +el.dataset.b;
+      });
+      if (dest) { dest.classList.add("marcado"); dest.scrollIntoView({ block: "center" }); return; }
+    }
+    window.scrollTo(0, 0);
+  }
+
+  function ruta() {
+    var h = location.hash.replace(/^#/, ""), m = h.match(/^(.*)-l(\d+)$/), linea = null;
+    if (m && porSlug[m[1]]) { h = m[1]; linea = +m[2]; }
+    if (porSlug[h]) { pintarArchivo(porSlug[h], linea); }
+    else { mostrar("intro"); marcarIndice("inicio"); if (h && h !== "inicio") { var el = document.getElementById(h); if (el) el.scrollIntoView(); } }
+  }
+  window.addEventListener("hashchange", ruta);
+
+  /* ---- Búsqueda ---- */
+  var q = document.getElementById("q"), temporizador = null;
+  function quitarEtiquetas(s) { var d = document.createElement("div"); d.innerHTML = s; return d.textContent; }
+  function resaltarTexto(t, termino) {
+    var i = t.toLowerCase().indexOf(termino), ini = Math.max(0, i - 50), fin = Math.min(t.length, i + termino.length + 70);
+    return (ini > 0 ? "…" : "") + esc(t.slice(ini, i)) + "<mark>" + esc(t.slice(i, i + termino.length)) + "</mark>" + esc(t.slice(i + termino.length, fin)) + (fin < t.length ? "…" : "");
+  }
+  function buscar() {
+    var termino = q.value.trim().toLowerCase();
+    if (termino.length < 2) { ruta(); return; }
+    var res = [];
+    archivos.forEach(function (a) {
+      a.codigo.forEach(function (ln, i) {
+        if (res.length < 120 && ln.toLowerCase().indexOf(termino) >= 0) res.push({ a: a, l: i + 1, tipo: "código", frag: resaltarTexto(ln.trim(), termino) });
+      });
+      a.bloques.forEach(function (b) {
+        if (!b.plano) b.plano = quitarEtiquetas(b.html);
+        if (res.length < 120 && b.plano.toLowerCase().indexOf(termino) >= 0) res.push({ a: a, l: b.a, tipo: "explicación de " + (b.a === b.b ? "la línea " + b.a : "las líneas " + b.a + "–" + b.b), frag: resaltarTexto(b.plano, termino) });
+      });
+    });
+    var h = ['<div class="resultados"><h2>' + (res.length ? res.length + (res.length === 120 ? "+" : "") + " resultados" : "Sin resultados") +
+             " para “" + esc(q.value.trim()) + "”</h2><ol>"];
+    res.forEach(function (r) {
+      h.push('<li><a class="donde" href="#' + r.a.slug + "-l" + r.l + '">' + esc(r.a.ruta) + ":" + r.l + "</a> · " + r.tipo +
+             '<span class="frag">' + r.frag + "</span></li>");
+    });
+    h.push("</ol></div>");
+    vistaBus.innerHTML = h.join("");
+    mostrar("busqueda");
+  }
+  q.addEventListener("input", function () { clearTimeout(temporizador); temporizador = setTimeout(buscar, 200); });
+  vistaBus.addEventListener("click", function (e) { if (e.target.closest("a")) { q.value = ""; } });
+
+  ruta();
+})();
+</script>

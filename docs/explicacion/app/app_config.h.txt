@@ -1,0 +1,95 @@
+# resumen: Todas las constantes y opciones de compilación de la aplicación en un solo lugar: constantes físicas de la especificación, ganancia y etapas iniciales, modo de reloj, tiempos de la adquisición, pines opcionales y tamaños de memoria. Lo usan el firmware y las pruebas en el PC, de modo que ambos compilan con los mismos números.
+@@ 1-12
+Cabecera del archivo. Explica de dónde salen los valores (secciones 1.4 y 10 de la especificación) y que el archivo se comparte con las pruebas del PC (`tests/`), que compilan el mismo código con gcc. Las líneas 9-11 explican el mecanismo de las opciones: las que están envueltas en `#ifndef` pueden fijarse sin editar el archivo, definiendo la macro en MPLAB X (*Project Properties › XC8 Compiler › Preprocessing › Define macros*), por ejemplo `GANANCIA_INICIAL=11`. Así funcionan las configuraciones `cristal_4MHz` y `oscilador_4MHz`, que solo añaden `RELOJ=1` o `RELOJ=2`.
+@@ 13-14
+**Guarda de inclusión**: si la cabecera se incluye dos veces en el mismo archivo (directa e indirectamente), la segunda vez `APP_CONFIG_H` ya está definido y el preprocesador salta todo hasta el `#endif` final. Evita redefiniciones.
+@@ 16-18
+Separador de la sección de constantes del sistema (sección 1.4 de la especificación).
+@@ 19
+`VCC_NOM_V` = 3.7 V: la tensión nominal a la que se normalizan las medidas. La tarjeta P2 es **ratiométrica**: sus salidas escalan con su alimentación VCC_A, que varía con la carga de la celda de litio (3.0–4.2 V). Para que las medidas no dependan de la batería, se refieren siempre a 3.7 V, como hacía el VI. La `f` final hace la constante de tipo `float` (32 bits); sin ella sería `double`.
+@@ 20
+`VCC_UMBRAL_V` = 2.5 V: si VCC_A medido es ≤ 2.5 V la lectura no es creíble (batería agotada o cable suelto). Entonces el procesamiento usa 3.7 V en lugar del valor medido y activa la bandera de "VCC_A fuera de rango", que enciende el LED de alarma (paso P1 del VI).
+@@ 21
+`MV_POR_1E4` = 4.03 mV: la calibración del sensor. Una grieta de profundidad relativa d = 1×10⁻⁴ produce 4.03 mV de señal. El indicador `d` del bloque se calcula como |V| / 4.03.
+@@ 23-27
+`GANANCIA_INICIAL` = 2: ganancia de la etapa DC de la tarjeta (×2, ×11 o ×101) cuando la EEPROM está vacía. El software **no puede leer** los jumpers JP701/JP702 de la tarjeta, así que este valor (o el que se elija luego con las órdenes `2`, `1`, `0`) debe coincidir con ellos; si no, todas las amplitudes salen mal escaladas. `#ifndef ... #endif` permite cambiarlo desde MPLAB X.
+@@ 29-32
+Explica el grupo siguiente: qué etapas del procesamiento están activas al arrancar sin datos en la EEPROM. En marcha se activan o desactivan con las órdenes `Z`, `T`, `G`, `N` y `A`, y el estado se guarda en la EEPROM.
+@@ 33-35
+`CERO_ACTIVO`: etapa de **cero**. Resta I0, Q0 (el punto capturado con "Fijar cero" sobre metal sano), de forma que el metal sano quede en el origen del plano polar.
+@@ 36-38
+`THETA_ACTIVO`: etapa de **rotación θ**. Gira el plano el ángulo capturado con "Calibrar θ" sobre papel (lift-off), para que la señal de despegue de la sonda caiga sobre el eje de 0° y una fisura se distinga por su ángulo.
+@@ 39-41
+`GANANCIA_ACTIVA`: dividir por la ganancia G de la tarjeta, para expresar la señal como estaba a la salida del mezclador.
+@@ 42-44
+`NORMALIZACION_ACTIVA`: normalización ratiométrica a 3.7 V (multiplicar por 3.7 / VCC_A).
+@@ 45-47
+`AUTOCERO_ACTIVO`: restar a todos los canales el offset del ADC medido convirtiendo AVSS (0 V interno) en cada ronda.
+@@ 48-50
+`ETAPAS_INICIALES`: combina las cinco opciones en una **máscara de bits** (bit 0 cero, bit 1 θ, bit 2 ganancia, bit 3 normalización, bit 4 autocero). Cada término `(X ? bit : 0u)` aporta su bit si la opción vale 1. Con todas activas vale 0x1F = 31, el número que aparece en el campo `etapas` de las líneas de bloque. La barra invertida `\` al final de línea continúa la macro en la línea siguiente.
+@@ 52-53
+Nota histórica: la tarjeta fabricada entrega el canal I con el signo invertido (sección 1.3 de la especificación). Antes era una opción; ahora la corrección se aplica siempre, dentro de `iq_proc.c` (paso P3).
+@@ 55-83
+Comentario de la sección del **reloj**. Describe los tres modos y su efecto en los pines:
+
+- `RELOJ_INTERNO`: oscilador interno HFINTOSC a 32 MHz; LED en RA5, pulsador "Calibrar θ" en RA4 y salida del disparo del ADC en RA1.
+- `RELOJ_CRISTAL_4MHZ`: cristal de 4 MHz entre RA5 (OSC1) y RA4 (OSC2) en modo XT (o HS); el PLL ×4 da 16 MHz. Al ocupar RA4 y RA5, el LED pasa a RA0 y el pulsador a RA1, por lo que la salida del disparo deja de estar disponible (salvo que se elija `SALIDA_DISPARO=1`, que deja sin pulsador).
+- `RELOJ_OSCILADOR_4MHZ`: módulo oscilador de 4 MHz con salida CMOS a RA5 (CLKIN), modo ECM (hasta 4 MHz, parámetro OS3 de la hoja de datos), PLL ×4 = 16 MHz (el PLL admite 4–16 MHz, parámetro PLL01). Solo el LED cambia de pin.
+
+Las líneas 72-78 resumen el comportamiento de reserva: el PIC arranca con el oscilador interno a 16 MHz, pasa al externo y, si este no arranca en 100 ms o se para después (el monitor FSCM lo deja a 1 MHz y salta la interrupción OSFIF), sigue con el interno a 16 MHz. Las líneas 80-82 explican por qué es una opción de compilación y no una orden en marcha: el tipo de oscilador lo fijan los bits de configuración, que se graban con el programa, y RA4/RA5 cambian de función.
+@@ 84-86
+Valores simbólicos de los tres modos de reloj, para poder escribir `#if RELOJ == RELOJ_CRISTAL_4MHZ` en lugar de números.
+@@ 87-89
+Modo por defecto: interno. Si se compila con `RELOJ=1` o `RELOJ=2` (configuraciones de MPLAB X), este `#define` no se aplica.
+@@ 91-97
+Define `FOSC_HZ`, la frecuencia del reloj del sistema, según el modo: 32 MHz con el interno; 16 MHz con el externo (4 MHz × 4) y también con su reserva interna. El sufijo `UL` (unsigned long, 32 bits) evita desbordes: en XC8 un `int` es de 16 bits y 32 000 000 no cabe. Si `RELOJ` tiene un valor no válido, `#error` detiene la compilación con un mensaje claro en lugar de compilar algo incoherente.
+@@ 98
+`RELOJ_EXTERNO`: vale 1 con cristal u oscilador y 0 con el interno. Es la condición que usan los `#if` de los archivos de MCC para elegir los valores de registros.
+@@ 99
+`F_EXTERNO_HZ`: frecuencia del reloj externo (4 MHz). `reloj.c` comprueba al compilar que 4 MHz × 4 = `FOSC_HZ`.
+@@ 101-106
+`CRISTAL_HS`: modo del amplificador del oscilador para el cristal. 0 (por defecto) = XT, ganancia media, que la hoja de datos indica para cristales de hasta 4 MHz (sección 8.2.1.2 y parámetro OS8); 1 = HS, ganancia alta (hasta 20 MHz), por si un cristal de resistencia serie alta no arranca en XT.
+@@ 108-122
+Comentario de la sección de **adquisición**. Resume el esquema de muestreo: cada conversión la dispara el flanco del PWM6 cada 100 µs, por hardware, así que el instante de muestreo tiene solo el jitter del oscilador. Los disparos se agrupan en rondas de 1 ms con una posición fija para cada canal (I_OUT, Q_OUT, V_REF, VCC_A, FVR, AVSS y 4 libres): cada canal se muestrea exactamente cada 1 ms, a 1000 muestras/s como el DAQ Assistant del VI. Una trama de 10 ms son 10 rondas, y la muestra de salida de cada canal es la suma de sus 10 conversiones (100 muestras/s de salida, bloques de 10 = 0.1 s).
+@@ 123
+`PERIODO_MS` = 10: una muestra de salida (trama) cada 10 ms, es decir 100 muestras/s. Se usa para la marca de tiempo `t_ms = trama × 10`.
+@@ 124
+`N_BLOQUE` = 10: muestras por bloque. 10 × 10 ms = 0.1 s, el mismo periodo que los bloques de 100 muestras a 1 kS/s del VI.
+@@ 125
+`ADC_CUENTAS` = 4095: código máximo del ADC de 12 bits (2¹² − 1), que corresponde a VDD.
+@@ 126-127
+`PERIODO_DISPARO_US` = 100 µs: periodo del TMR2/PWM6 que dispara el ADC. Con FOSC/4 como reloj del TMR2 y T2PR = 199 (200 cuentas): a 32 MHz, 8 MHz / 4 (prescaler) / 200 = 10 kHz; a 16 MHz, 4 MHz / 2 / 200 = 10 kHz. La línea 127 continúa el comentario.
+@@ 128
+`DISPAROS_POR_RONDA` = 10: una ronda son 10 disparos (6 canales + 4 libres) = 1 ms.
+@@ 129
+`PERIODO_MUESTREO_US` = 100 × 10 = 1000 µs: cada canal se convierte una vez cada 1 ms.
+@@ 130
+`MUESTRAS_POR_S` = 1 000 000 / 1000 = 1000 muestras/s por canal. Se imprime en la línea `# ADC:` del mensaje de estado.
+@@ 131
+`N_SOBREMUESTREO` = 10: rondas por trama, es decir conversiones de cada canal que se suman en cada muestra de salida. Sumar 10 conversiones reduce el ruido hasta √10 (≈ 10 dB) si hay al menos ~0.5 LSB de ruido.
+@@ 132
+`DISPAROS_POR_TRAMA` = 10 × 10 = 100 disparos = 10 ms.
+@@ 133
+`N_COLA_TRAMAS` = 4: cuántas tramas terminadas pueden esperar a que el lazo principal las procese. 4 × 10 ms = 40 ms de retraso tolerado sin perder datos.
+@@ 134
+`N_CAPTURA` = 200: número de conversiones de I_OUT que envía la orden `m` (200 ms a 1 kS/s), para medir el SNR y el jitter con `pc/medir_jitter.py`.
+@@ 136-146
+`SALIDA_DISPARO`: si vale 1, la señal del PWM6 sale por RA1 para medir con un osciloscopio el jitter de los disparos. RA1 es también ICSPCLK (programación), así que en compilaciones de depuración (`__DEBUG`) no se usa. Valor por defecto: 0 con el cristal (RA1 es el pulsador "Calibrar θ") y 1 en los demás modos. El `#if` está anidado dentro del `#ifndef` para que el usuario pueda forzarlo desde MPLAB X.
+@@ 148-151
+`BOTON_THETA_EN_RA1`: vale 1 solo con cristal y sin salida del disparo; entonces el pulsador "Calibrar θ" se lee en RA1. Lo usa `pin_manager.h` para elegir el pin. En los demás casos con cristal no hay pulsador y queda la orden `c`.
+@@ 153-158
+`USAR_FVR`: si vale 1 (por defecto), en cada ronda se convierte también la referencia interna FVR de 1.024 V. Como el ADC mide contra VDD, la relación entre VCC_A y el FVR da VCC_A en voltios (`VCC_A = 1.024 · cV / cF`), y eso permite la protección de 2.5 V y el LED de alarma. Con 0 la normalización es puramente ratiométrica, como el pseudocódigo 10.6 de la especificación, sin esa protección.
+@@ 159
+`FVR_V` = 1.024 V: tensión nominal del FVR con ganancia 1×. La hoja de datos le da ±4 % (parámetro FVR01), que es la exactitud del valor de VCC_A en voltios.
+@@ 161-166
+`DIVISOR_VCCA`: 1 si VCC_A llega directo a RC3; 2 si se monta un divisor 1:2 (dos resistencias de 10 kΩ) porque VCC_A puede superar la VDD del PIC (el ADC no puede medir por encima de VDD). El procesamiento multiplica por este factor.
+@@ 168-170
+Separador de la sección de plano polar, salida y memoria no volátil.
+@@ 171-173
+`N_TRAZA` = 64: puntos (I′, Q′) que guarda el PIC para volcarlos con la orden `p`. Cada punto son dos `float` (8 bytes): 512 bytes de los 2048 de RAM. 0 elimina la traza.
+@@ 174-176
+`USAR_EEPROM` = 1: guardar en la EEPROM interna I0, Q0, θ, G y las etapas, para recuperarlos al encender.
+@@ 178
+`VERSION_FIRMWARE` = "1.4": cadena que aparece en el mensaje de estado (`# P2 IQ - PIC16F18426 - firmware 1.4`). La 1.3 introdujo el muestreo a 1 kS/s y la 1.4 la opción de reloj externo.
+@@ 180
+Cierre de la guarda de inclusión abierta en la línea 13.

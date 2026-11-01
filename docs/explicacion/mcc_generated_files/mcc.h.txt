@@ -1,0 +1,23 @@
+# resumen: Cabecera central de MCC Classic: incluye los registros del PIC, la configuración del reloj y las cabeceras de todos los drivers, y declara las tres funciones de inicialización del sistema. Cualquier archivo que incluya mcc.h tiene acceso a todo el hardware.
+@@ 1-12
+Cabecera con el formato de comentarios de MCC (Doxygen: `@File Name`, `@Summary`, `@Description`). Avisa de que el archivo equivale al que genera MCC Classic con la configuración documentada en `docs/configuracion_MCC_Classic.md` y que se sustituye si se vuelve a generar con MCC.
+@@ 14-15
+Guarda de inclusión.
+@@ 16
+`<xc.h>`: la cabecera del compilador XC8, que según el microcontrolador elegido en el proyecto incluye `pic16f18426.h`, con las direcciones de todos los registros (ADCON0, PORTA…) y sus campos de bits (`ADCON0bits.ADCS`…).
+@@ 17
+`device_config.h`: define `_XTAL_FREQ` (la frecuencia del reloj para las esperas `__delay_us`/`__delay_ms`) e incluye `app_config.h`, con lo que todos los drivers ven la opción `RELOJ`.
+@@ 18
+`pin_manager.h`: nombres de los pines (LED, pulsadores, entradas analógicas) y su configuración según el reloj.
+@@ 19-20
+Tipos estándar de tamaño fijo y booleanos.
+@@ 21-27
+Las cabeceras de los drivers de los periféricos que usa el proyecto: interrupciones, FVR (referencia de 1.024 V), memoria (EEPROM), TMR2 (base de tiempo), PWM6 (disparo del ADC), ADCC (convertidor) y EUSART1 (UART).
+@@ 29-40
+`SYSTEM_Initialize()`: inicializa el dispositivo con la configuración elegida en MCC. La llama `main()` lo primero.
+@@ 42-53
+`OSCILLATOR_Initialize()`: configura el oscilador.
+@@ 55-66
+`PMD_Initialize()`: configura el módulo PMD (*Peripheral Module Disable*), que permite apagar periféricos no usados para ahorrar consumo.
+@@ 68
+Cierre de la guarda de inclusión.
