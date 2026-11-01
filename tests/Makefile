@@ -4,7 +4,8 @@
 #   make test   solo las pruebas unitarias (vectores de la seccion 9.1)
 #   make pc     pruebas de los programas del PC: interprete de lineas de
 #               pc/plano_polar.py, analisis de pc/medir_jitter.py y
-#               pc/adc_1ksps.py (numpy; despues de "make adc1k")
+#               pc/adc_1ksps.py (numpy; despues de "make adc1k") y
+#               pc/prueba_usb6211.py (sin la tarjeta)
 #   make sim    simula el firmware completo (main.c y app/*.c sin cambios)
 #               con un hardware falso y comprueba su salida por UART
 #   make adc1k  simula el avance ADC_1kSPS_PIC16F18426.X (1000 muestras/s
@@ -64,6 +65,7 @@ pc:
 	python3 test_plano_polar.py
 	python3 test_medir_jitter.py
 	python3 test_adc_1ksps.py
+	python3 test_prueba_usb6211.py
 
 clean:
 	rm -rf test_iq_proc build

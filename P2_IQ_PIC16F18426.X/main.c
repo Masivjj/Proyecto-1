@@ -6,9 +6,11 @@
  * Reproduce el procesamiento del VI de LabVIEW P2_IQ_SINAD.vi
  * (docs/P2_IQ_procesamiento_para_PIC16F18426.md).
  *
- * El muestreo no lo hace este lazo: el PWM6 dispara cada conversion del ADC
- * por hardware cada 100 us y la interrupcion del ADC acumula las 16
- * conversiones de cada canal (adquisicion.c, docs/analisis_adc_jitter.md).
+ * El muestreo no lo hace este lazo: el ADC (modo basico) convierte en cada
+ * flanco del PWM6, cada 100 us, y la interrupcion del ADC recorre rondas de
+ * 1 ms en las que cada entrada se convierte una vez: 1000 muestras/s por
+ * canal. Acumula las 10 conversiones de cada canal de la trama
+ * (adquisicion.c, docs/analisis_adc_jitter.md).
  * Cada 10 ms queda una trama en la cola, y este lazo:
  *   1. calcula Ip, Qp (procesadas) e I', Q' (finales)          (iq_proc.c)
  *   2. guarda (I', Q') en la traza del plano polar                (traza.c)

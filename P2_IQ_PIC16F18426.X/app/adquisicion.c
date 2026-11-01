@@ -11,12 +11,19 @@
  * el del oscilador: no le afectan las interrupciones ni el lazo principal.
  * Con FRC (ADCS = 1), en cambio, el inicio no estaria sincronizado con FOSC.
  *
- * Una trama de 10 ms son 100 disparos: 16 rondas de I_OUT, Q_OUT, V_REF,
- * VCC_A, FVR y AVSS (96 conversiones) y 4 disparos libres que se descartan.
- * Al terminar cada conversion, la interrupcion suma el resultado en su canal
- * y elige el canal de la siguiente, que tiene ~85 us para asentarse antes de
- * su disparo. Al terminar la trama, las sumas pasan a una cola que vacia
- * main(): si main se retrasa, las muestras se siguen tomando a su hora.
+ * Los disparos se agrupan en rondas de 1 ms (10 disparos): I_OUT, Q_OUT,
+ * V_REF, VCC_A, FVR y AVSS ocupan las posiciones 0 a 5 y las 4 restantes
+ * son disparos libres (convierten AVSS y se descartan). Cada canal ocupa
+ * siempre la misma posicion, asi que se muestrea exactamente cada 1 ms:
+ * 1000 muestras/s por entrada, con el periodo fijado por el TMR2.
+ * Una trama de 10 ms son 10 rondas. Al terminar cada conversion, la
+ * interrupcion suma el resultado en su canal y elige el canal de la
+ * siguiente, que tiene ~85 us para asentarse antes de su disparo. Al
+ * terminar la trama, las sumas pasan a una cola que vacia main(): si main
+ * se retrasa, las muestras se siguen tomando a su hora.
+ *
+ * La captura de la orden 'm' copia las conversiones de I_OUT de las rondas
+ * (una por ms) sin parar las tramas: son las mismas muestras que se procesan.
  */
 #include "../mcc_generated_files/mcc.h"
 #include "adquisicion.h"
@@ -34,10 +41,11 @@
 #define PPS_PWM6OUT     0x0Du   /* tabla 16-3 */
 
 #define N_CANALES               6u
-#define CONVERSIONES_POR_TRAMA  (N_CANALES * N_SOBREMUESTREO)
 
-typedef char adq_trama_cabe[(CONVERSIONES_POR_TRAMA <= DISPAROS_POR_TRAMA) ? 1 : -1];
+typedef char adq_ronda_cabe[(N_CANALES <= DISPAROS_POR_RONDA) ? 1 : -1];
+typedef char adq_ronda_1ms[(PERIODO_MUESTREO_US == 1000u) ? 1 : -1];
 typedef char adq_trama_10ms[(DISPAROS_POR_TRAMA * PERIODO_DISPARO_US == PERIODO_MS * 1000u) ? 1 : -1];
+typedef char adq_suma_16_bits[((uint32_t)N_SOBREMUESTREO * ADC_CUENTAS <= 0xFFFFu) ? 1 : -1];
 
 /* Orden de las conversiones en cada ronda; la posicion es el indice de suma[] */
 enum { IDX_I, IDX_Q, IDX_R, IDX_V, IDX_F, IDX_Z };
@@ -52,8 +60,8 @@ typedef struct {
 
 /* Estado de la interrupcion */
 static volatile uint16_t suma[N_CANALES];
-static volatile uint8_t  disparo;       /* disparo de la conversion que termina */
-static volatile uint8_t  canal;         /* su posicion en secuencia[]           */
+static volatile uint8_t  ranura;        /* posicion en la ronda de la conversion que termina */
+static volatile uint8_t  ronda;         /* ronda de la trama (0 .. N_SOBREMUESTREO-1)        */
 static volatile uint32_t num_trama;
 
 /* Cola de tramas terminadas (escribe la interrupcion, lee main) */
@@ -61,7 +69,7 @@ static volatile trama_t  cola[N_COLA_TRAMAS];
 static volatile uint8_t  cola_escr, cola_lect, cola_n;
 static volatile uint32_t perdidas;
 
-/* Captura para medir el jitter */
+/* Captura de la orden 'm' */
 enum { CAP_NADA, CAP_PEDIDA, CAP_EN_CURSO, CAP_LISTA };
 static volatile uint8_t  cap_estado;
 static uint16_t * volatile cap_buf;
@@ -72,11 +80,7 @@ static void fin_de_trama(void)
     uint8_t k;
 
     num_trama++;
-    if (cap_estado == CAP_EN_CURSO) {
-        if (cap_i >= cap_n) {
-            cap_estado = CAP_LISTA;
-        }
-    } else if (cola_n < N_COLA_TRAMAS) {
+    if (cola_n < N_COLA_TRAMAS) {
         for (k = 0u; k < N_CANALES; k++) {
             cola[cola_escr].suma[k] = suma[k];
         }
@@ -91,7 +95,7 @@ static void fin_de_trama(void)
     for (k = 0u; k < N_CANALES; k++) {
         suma[k] = 0u;
     }
-    if (cap_estado == CAP_PEDIDA) {
+    if (cap_estado == CAP_PEDIDA) {     /* la captura empieza con la trama */
         cap_i = 0u;
         cap_estado = CAP_EN_CURSO;
     }
@@ -102,31 +106,26 @@ static void al_terminar_conversion(void)
 {
     uint16_t resultado = ADCC_GetConversionResult();
 
-    if (cap_estado == CAP_EN_CURSO) {
-        if (cap_i < cap_n) {
-            cap_buf[cap_i++] = resultado;
+    if (ranura < N_CANALES) {
+        suma[ranura] += resultado;
+        if ((ranura == IDX_I) && (cap_estado == CAP_EN_CURSO)) {
+            cap_buf[cap_i] = resultado;
+            if (++cap_i >= cap_n) {
+                cap_estado = CAP_LISTA;
+            }
         }
-    } else if (disparo < CONVERSIONES_POR_TRAMA) {
-        suma[canal] += resultado;
-        if (++canal >= N_CANALES) {
-            canal = 0u;
-        }
-    }
+    }                                   /* disparo libre: se descarta */
 
-    if (++disparo >= DISPAROS_POR_TRAMA) {
-        disparo = 0u;
-        canal = 0u;
-        fin_de_trama();
+    if (++ranura >= DISPAROS_POR_RONDA) {
+        ranura = 0u;
+        if (++ronda >= N_SOBREMUESTREO) {
+            ronda = 0u;
+            fin_de_trama();
+        }
     }
 
     /* Canal de la proxima conversion */
-    if (cap_estado == CAP_EN_CURSO) {
-        ADPCH = CANAL_I_OUT;
-    } else if (disparo < CONVERSIONES_POR_TRAMA) {
-        ADPCH = secuencia[canal];
-    } else {
-        ADPCH = CANAL_AVSS;             /* disparo libre: se descarta */
-    }
+    ADPCH = (ranura < N_CANALES) ? secuencia[ranura] : CANAL_AVSS;
 }
 
 void adq_inicializar(void)
@@ -144,8 +143,8 @@ void adq_inicializar(void)
     for (k = 0u; k < N_CANALES; k++) {
         suma[k] = 0u;
     }
-    disparo = 0u;
-    canal = 0u;
+    ranura = 0u;
+    ronda = 0u;
     ADPCH = secuencia[0];
     ADCC_SetADIInterruptHandler(al_terminar_conversion);
     PIR1bits.ADIF = 0;

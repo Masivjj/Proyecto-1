@@ -11,7 +11,8 @@ El guion del simulador (tests/sim/sim.c) es:
   3.5-4.5 s  lift-off de 30 mV a 20 grados;  4.0 s 'c' calibrar theta
   5.0 s      'p' volcar la traza     5.8 / 5.9 s  ganancia x11 y vuelta a x2
   6.2 s      orden desconocida       6.5 s  main se para 150 ms (se pierden tramas)
-  7.0 s      pulsador "Fijar cero" 150 ms;  7.5 s 'm' captura;  8.0 s rebote de 20 ms
+  7.0 s      pulsador "Fijar cero" 150 ms;  8.0 s rebote de 20 ms
+  7.5 s      'm' captura (tono de 115 Hz y 20 mV en I entre 7.45 y 7.85 s)
   9.0 s      'b' borrar traza
   9.3 s      'Z' desactiva el cero;  9.45 s 'z' (ignorada);  9.6 s 'T' desactiva theta
   9.7 s      'A' desactiva el autocero;  9.8 s '?' estado
@@ -24,6 +25,8 @@ import sys
 
 OFFSET_ADC = 3
 VDD, VCC_A, G = 3.70, 3.65, 2.0
+FS = 1000.0                 # muestras/s de cada entrada
+TONO_HZ, TONO_MV = 115.0, 20.0
 
 fallos = 0
 
@@ -71,10 +74,11 @@ def main():
     perdida = [s for s in saltos if 6400 < s[0] < 6800]
     comprobar("parada de 150 ms a los 6.5 s: hueco de 11 tramas perdidas",
               len(perdida) == 1 and perdida[0][1] == 10 * (1 + 11), f"{perdida}")
-    hueco_captura = [s for s in saltos if 7400 < s[0] < 7700]
-    comprobar("captura a los 7.5 s: hueco de 2 tramas (200 disparos)",
-              len(hueco_captura) == 1 and hueco_captura[0][1] == 30, f"{hueco_captura}")
-    comprobar("no hay otros huecos", len(saltos) == 2, f"{saltos}")
+    comprobar("captura a los 7.5 s: las tramas siguen, sin hueco",
+              not any(7400 < s[0] < 7800 for s in saltos), f"{saltos}")
+    comprobar("no hay otros huecos", len(saltos) == 1, f"{saltos}")
+    comprobar("estado: ADC en modo basico a 1000 muestras/s por canal",
+              "# ADC: modo basico, disparo PWM6 cada 100 us, 1000 muestras/s por canal, 10 por trama" in lineas)
     comprobar("la ultima muestra sigue en la base de tiempo (t = 9990 ms)", t[-1] == 9990)
     con_retraso = [r[0] for r in b if r[9] & 0x20]
     comprobar("bandera de retraso solo en el bloque de la perdida",
@@ -119,13 +123,26 @@ def main():
     comprobar("volcado de la traza: 64 puntos", len(puntos) == 64 and "# traza: 64 puntos" in lineas[i0])
 
     comprobar("captura: 200 codigos entre '# m: ...' y '# fin captura'",
-              len(captura) == 200 and any(x.startswith("# m: captura de 200 conversiones de I_OUT") for x in lineas)
+              len(captura) == 200 and "# m: captura de 200 conversiones de I_OUT, una cada 1000 us" in lineas
               and "# fin captura" in lineas, f"{len(captura)} codigos")
     v_i = VCC_A / 2 - 62.3276 * G / 1000 * (VCC_A / 3.7)
-    esperado = round(v_i / VDD * 4095) + OFFSET_ADC
-    comprobar("captura: codigos de I_OUT del metal sano (con el offset)",
-              bool(captura) and abs(statistics.median(captura) - esperado) <= 1 and max(captura) - min(captura) <= 2,
-              f"mediana {statistics.median(captura) if captura else '-'}, esperado {esperado}")
+    esperado = v_i / VDD * 4095 + OFFSET_ADC
+    media = statistics.fmean(captura) if captura else 0.0
+    comprobar("captura: codigos de I_OUT del metal sano (con el offset)", abs(media - esperado) <= 1,
+              f"media {media:.2f}, esperado {esperado:.2f}")
+    # Con una muestra cada 1 ms, los 200 codigos son 23 periodos del tono de
+    # 115 Hz: su amplitud sale entera en la DFT a 115 Hz y la de las
+    # frecuencias vecinas es ~0. A otro ritmo de muestreo el tono caeria en
+    # otra frecuencia.
+    def amplitud(f):
+        re_ = sum((c - media) * math.cos(2 * math.pi * f * k / FS) for k, c in enumerate(captura))
+        im_ = sum((c - media) * math.sin(2 * math.pi * f * k / FS) for k, c in enumerate(captura))
+        return 2 * math.hypot(re_, im_) / max(len(captura), 1)
+    tono = TONO_MV * G / 1000 * (VCC_A / 3.7) / VDD * 4095
+    a115, vecinas = amplitud(TONO_HZ), max(amplitud(TONO_HZ - 10), amplitud(TONO_HZ + 10))
+    comprobar("captura: una muestra cada 1 ms (tono de 115 Hz con su amplitud)",
+              abs(a115 / tono - 1) < 0.03 and vecinas < 0.05 * tono,
+              f"{a115:.2f} LSB a 115 Hz, esperado {tono:.2f}; vecinas {vecinas:.2f}")
 
     comprobar("ganancia x11 y vuelta a x2", any(x.startswith("# G=11 ") for x in lineas)
               and any(x.startswith("# G=2 ") for x in lineas[lineas.index(next(x for x in lineas if x.startswith("# G=11 "))):]))

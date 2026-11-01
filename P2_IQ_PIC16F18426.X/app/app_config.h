@@ -55,20 +55,29 @@
 /* ------------------------------------------------------------------------
  * Adquisicion (seccion 10.4 y docs/analisis_adc_jitter.md)
  *
- * Cada conversion la dispara por hardware el flanco de subida del PWM6
- * (TMR2, periodo PERIODO_DISPARO_US): el instante de muestreo no depende
- * del software y su jitter es el del oscilador. Una trama de 10 ms tiene
- * DISPAROS_POR_TRAMA disparos: 16 rondas de los 6 canales (I_OUT, Q_OUT,
- * V_REF, VCC_A, FVR y AVSS) y 4 disparos libres.
+ * ADC en modo basico. Cada conversion la dispara por hardware el flanco de
+ * subida del PWM6 (TMR2, periodo PERIODO_DISPARO_US = 100 us): el instante
+ * de muestreo no depende del software y su jitter es el del oscilador.
+ *
+ * Los disparos se agrupan en rondas de 1 ms (DISPAROS_POR_RONDA = 10):
+ * I_OUT, Q_OUT, V_REF, VCC_A, FVR, AVSS y 4 disparos libres. Cada entrada
+ * se convierte una vez por ronda, siempre en la misma posicion, asi que
+ * cada canal se muestrea a 1000 muestras/s con un periodo fijo de 1 ms,
+ * como el DAQ Assistant del VI (1 kS/s por canal). Una trama de 10 ms son
+ * N_SOBREMUESTREO = 10 rondas: la muestra de salida de cada canal es la
+ * suma de sus 10 conversiones (100 S/s de salida, bloques de 10 = 0.1 s).
  * ------------------------------------------------------------------------ */
 #define PERIODO_MS          10u     /* una muestra de salida (trama) cada 10 ms (100 S/s) */
 #define N_BLOQUE            10u     /* 10 muestras = 0.1 s, como el bloque de LabVIEW     */
-#define N_SOBREMUESTREO     16u     /* conversiones por canal en cada trama               */
 #define ADC_CUENTAS         4095u   /* fondo de escala del ADC de 12 bits                 */
 #define PERIODO_DISPARO_US  100u    /* periodo del PWM6 = TMR2 (FOSC/4, 1:4, T2PR = 199)  */
-#define DISPAROS_POR_TRAMA  100u    /* 100 x 100 us = 10 ms                               */
+#define DISPAROS_POR_RONDA  10u     /* 6 canales + 4 libres = 1 ms                        */
+#define PERIODO_MUESTREO_US (PERIODO_DISPARO_US * DISPAROS_POR_RONDA)  /* 1000 us por canal */
+#define MUESTRAS_POR_S      (1000000u / PERIODO_MUESTREO_US)           /* 1000 S/s por canal */
+#define N_SOBREMUESTREO     10u     /* rondas (conversiones por canal) en cada trama      */
+#define DISPAROS_POR_TRAMA  (DISPAROS_POR_RONDA * N_SOBREMUESTREO)     /* 100 = 10 ms     */
 #define N_COLA_TRAMAS       4u      /* tramas que pueden esperar a main (40 ms de retraso) */
-#define N_CAPTURA           200u    /* conversiones seguidas de I_OUT en la orden 'm'     */
+#define N_CAPTURA           200u    /* conversiones de I_OUT seguidas (1 por ms) en la orden 'm' */
 
 /* 1: el PWM6 (instante de cada conversion) sale por RA1 para medir su
  * jitter con un osciloscopio. RA1 es ICSPCLK: en las compilaciones de
@@ -102,6 +111,6 @@
 #define USAR_EEPROM         1       /* 1: guardar I0, Q0, theta, G y etapas en la EEPROM  */
 #endif
 
-#define VERSION_FIRMWARE    "1.2"
+#define VERSION_FIRMWARE    "1.3"
 
 #endif /* APP_CONFIG_H */

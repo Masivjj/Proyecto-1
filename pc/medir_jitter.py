@@ -3,9 +3,12 @@
 medir_jitter.py - SNR del ADC del PIC16F18426 y estimación del jitter de
 muestreo a partir de las capturas de la orden 'm' del firmware.
 
-El firmware convierte I_OUT (RC0 / ANC0) 200 veces seguidas, una por flanco
-del PWM6 (cada 100 µs, fs = 10 kS/s), y las envía como líneas "M,c1,...,c10"
-entre "# m: captura de ..." y "# fin captura".
+El firmware (versión 1.3) muestrea cada entrada a 1000 muestras/s: el PWM6
+dispara una conversión cada 100 µs y cada canal ocupa una posición fija en
+rondas de 1 ms. La orden 'm' copia 200 conversiones seguidas de I_OUT
+(RC0 / ANC0), una por ms (fs = 1 kS/s), y las envía como líneas
+"M,c1,...,c10" entre "# m: captura de ..., una cada 1000 us" y
+"# fin captura". El periodo se lee de esa cabecera.
 
 Método (docs/analisis_adc_jitter.md, sección 6):
   - Cada captura se ajusta a una senoide (ajuste de 4 parámetros, IEEE 1057):
@@ -22,14 +25,16 @@ Método (docs/analisis_adc_jitter.md, sección 6):
 
 Montaje: desconectar I_OUT de la tarjeta y llevar a RC0 un generador senoidal
 con offset VDD/2 (1.85 V) y 3.4 Vpp (−0.7 dBFS) desde 50 Ω. Las frecuencias
-por defecto, 1230 Hz y 51 230 Hz, se ven las dos en 1230 Hz (51 230 − 5·10 000).
+por defecto, 230 Hz y 51 230 Hz, se ven las dos en 230 Hz (51 230 − 51·1000):
+la de 51 230 Hz se mide por submuestreo, porque el jitter solo se nota con
+señales rápidas.
 Con σ = 10 ns, a 51 230 Hz el jitter limita el SNR a 49.8 dB, muy por debajo
 de los 74 dB de un ADC ideal de 12 bits: se mide con holgura.
 
 Uso:
     python medir_jitter.py capturar --puerto COM5 --capturas 10 -o baja.txt
-    python medir_jitter.py analizar baja.txt --fin 1230 [--png baja.png]
-    python medir_jitter.py jitter baja.txt alta.txt --fin-baja 1230 --fin-alta 51230
+    python medir_jitter.py analizar baja.txt --fin 230 [--png baja.png]
+    python medir_jitter.py jitter baja.txt alta.txt --fin-baja 230 --fin-alta 51230
     python medir_jitter.py simular --sigma 10e-9          valida el método sin hardware
     python medir_jitter.py tabla                          SNR del jitter frente a f
 
@@ -46,7 +51,7 @@ import numpy as np
 
 CUENTAS = 4096                  # ADC de 12 bits
 FS_RMS = CUENTAS / 2 / math.sqrt(2)     # senoide de fondo de escala: 1448 LSB eficaces
-PERIODO_US = 100.0              # PERIODO_DISPARO_US del firmware
+PERIODO_US = 1000.0             # PERIODO_MUESTREO_US del firmware (1 kS/s por canal)
 N_ARMONICOS = 5
 SNR_OBJETIVO_DB = 80.0          # límite superior pedido para el SNR del jitter
 SIGMA_OBJETIVO = 10e-9
@@ -277,7 +282,7 @@ def informe_jitter(sigma, cota):
 # Simulación (valida el método)
 # --------------------------------------------------------------------------
 
-def simular_capturas(f, sigma, capturas=10, n=200, fs=1e4, amplitud=1900.0, ruido=0.5,
+def simular_capturas(f, sigma, capturas=10, n=200, fs=1e3, amplitud=1900.0, ruido=0.5,
                      offset=2048.0, generador=None):
     """Capturas de una senoide de frecuencia real f muestreada con jitter σ
     (gaussiano, independiente en cada muestra), ruido térmico y cuantificación."""
@@ -400,14 +405,14 @@ def main():
     j = sub.add_parser("jitter", help="estima σ con una captura a frecuencia baja y otra alta")
     j.add_argument("baja")
     j.add_argument("alta")
-    j.add_argument("--fin-baja", type=float, default=1230.0)
+    j.add_argument("--fin-baja", type=float, default=230.0)
     j.add_argument("--fin-alta", type=float, default=51230.0)
 
     s = sub.add_parser("simular", help="valida el método con capturas sintéticas de σ conocido")
     s.add_argument("--sigma", type=float, default=10e-9, help="jitter simulado (s)")
     s.add_argument("--ruido", type=float, default=0.5, help="ruido del ADC (LSB eficaces)")
     s.add_argument("--capturas", type=int, default=10)
-    s.add_argument("--fin-baja", type=float, default=1230.0)
+    s.add_argument("--fin-baja", type=float, default=230.0)
     s.add_argument("--fin-alta", type=float, default=51230.0)
     s.add_argument("--semilla", type=int, default=1)
     s.add_argument("--guardar", metavar="PREFIJO",

@@ -19,7 +19,7 @@
 #define CENTESIMAS      100.0f      /* grados -> centesimas de grado */
 #define MILESIMAS       1000.0f     /* d (x1e-4) -> milesimas        */
 
-#define ESTADO_LINEAS   8u
+#define ESTADO_LINEAS   9u
 #define CODIGOS_POR_LINEA 10u       /* captura: codigos en cada linea M,...   */
 
 static uint8_t estado_paso;         /* proxima linea del estado (0 = ninguna) */
@@ -122,9 +122,18 @@ static void tx_linea_estado(uint8_t paso, uint32_t muestras_perdidas)
         tx_texto("# P2 IQ - PIC16F18426 - firmware " VERSION_FIRMWARE "\r\n");
         break;
     case 2u:
-        tx_configuracion();
+        tx_texto("# ADC: modo basico, disparo PWM6 cada ");
+        tx_u32(PERIODO_DISPARO_US);
+        tx_texto(" us, ");
+        tx_u32(MUESTRAS_POR_S);
+        tx_texto(" muestras/s por canal, ");
+        tx_u32(N_SOBREMUESTREO);
+        tx_texto(" por trama\r\n");
         break;
     case 3u:
+        tx_configuracion();
+        break;
+    case 4u:
         tx_texto("# puntos en traza: ");
         tx_u32(traza_puntos());
         tx_texto("  muestras perdidas: ");
@@ -134,16 +143,16 @@ static void tx_linea_estado(uint8_t paso, uint32_t muestras_perdidas)
         tx_texto(" LSB");
         tx_fin();
         break;
-    case 4u:
+    case 5u:
         tx_texto("# muestra: t_ms,Ip_uV,Qp_uV,I1_uV,Q1_uV\r\n");
         break;
-    case 5u:
+    case 6u:
         tx_texto("# bloque:  B,V_uV,fase_cdeg,d_milesimas,I0_uV,Q0_uV,theta_cdeg,vcc_mV,G,banderas,etapas\r\n");
         break;
-    case 6u:
+    case 7u:
         tx_texto("# ordenes: z=fijar cero x=borrar cero c=calibrar theta t=theta 0 b=borrar traza\r\n");
         break;
-    case 7u:
+    case 8u:
         tx_texto("#          2/1/0=ganancia x2/x11/x101 p=volcar traza m=captura (jitter) ?=estado\r\n");
         break;
     default:
@@ -274,7 +283,8 @@ static void volcar_punto(void)
 }
 
 /* Orden 'm': captura N_CAPTURA conversiones seguidas de I_OUT (una por
- * disparo del PWM6) para medir el jitter con pc/medir_jitter.py */
+ * ronda, cada PERIODO_MUESTREO_US = 1 ms) para medir el SNR y el jitter con
+ * pc/medir_jitter.py. Las tramas siguen mientras tanto. */
 static void iniciar_captura(void)
 {
     if (adq_capturando() || (volcado_total != 0u)) {
@@ -287,7 +297,7 @@ static void iniciar_captura(void)
     tx_texto("# m: captura de ");
     tx_u32(N_CAPTURA);
     tx_texto(" conversiones de I_OUT, una cada ");
-    tx_u32(PERIODO_DISPARO_US);
+    tx_u32(PERIODO_MUESTREO_US);
     tx_texto(" us\r\n");
 }
 

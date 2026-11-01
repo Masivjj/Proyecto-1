@@ -123,7 +123,7 @@ Con él se conoce VCC_A en voltios (`VCC_A = 1.024 · cV / cFVR`) para la protec
 | Timer Period | **100 µs** (MCC pone T2PR = 199) |
 | Enable Timer Interrupt | **sin marcar** |
 
-4 · 200 / 8 MHz = 100.000 µs exactos = 3200 ciclos de FOSC = 100 TAD. Una trama de 10 ms son 100 periodos.
+4 · 200 / 8 MHz = 100.000 µs exactos = 3200 ciclos de FOSC = 100 TAD. `app/adquisicion.c` agrupa los disparos en rondas de 10 (1 ms) en las que cada entrada se convierte una vez, siempre en la misma posición: **1000 muestras/s por canal**. Una trama de 10 ms son 10 rondas (100 periodos). Para pasar a 1 kS/s por canal no hay que cambiar nada en MCC: el TMR2 sigue a 100 µs.
 
 ---
 

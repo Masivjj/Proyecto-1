@@ -81,7 +81,7 @@ TODAS = 0x1F
 
 # Captura de la orden 'm' en la demostración (como el firmware)
 N_CAPTURA = 200
-PERIODO_DISPARO_US = 100
+PERIODO_MUESTREO_US = 1000      # una conversion de I_OUT por ronda de 1 ms (1 kS/s)
 VDD_DEMO = 3.70
 OFFSET_ADC_DEMO = 3         # LSB; lo mide y lo resta el autocero
 
@@ -263,11 +263,11 @@ class FuenteDemo:
         return 3653 if self._activa(0x10) else 3646
 
     def _captura(self, t):
-        """Orden 'm': N_CAPTURA códigos de I_OUT, uno cada 100 µs."""
-        self.cola.put(f"# m: captura de {N_CAPTURA} conversiones de I_OUT, una cada {PERIODO_DISPARO_US} us")
+        """Orden 'm': N_CAPTURA códigos de I_OUT, uno cada 1 ms."""
+        self.cola.put(f"# m: captura de {N_CAPTURA} conversiones de I_OUT, una cada {PERIODO_MUESTREO_US} us")
         codigos = []
         for k in range(N_CAPTURA):
-            ip, _ = self._senal(t + k * PERIODO_DISPARO_US / 1e6)
+            ip, _ = self._senal(t + k * PERIODO_MUESTREO_US / 1e6)
             v = 3.653 / 2 - ip * self.G_TARJETA / 1000 * (3.653 / 3.7)
             codigos.append(round(v / VDD_DEMO * 4095 + random.gauss(0, 0.4)) + OFFSET_ADC_DEMO)
         for k in range(0, N_CAPTURA, 10):

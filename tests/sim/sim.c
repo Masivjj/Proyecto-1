@@ -6,9 +6,11 @@
  *   - PWM6 + ADC: cada 100 us (un disparo) se convierte el canal que la
  *     interrupcion dejo en ADPCH y se llama a esa interrupcion, como en el PIC.
  *     El ADC tiene un offset de +3 LSB (lo mide el autocero en AVSS).
+ *     Se comprueba que cada entrada (I_OUT, Q_OUT, V_REF, VCC_A y FVR) se
+ *     convierte exactamente cada 1 ms: 1000 muestras/s por canal.
  *   - tarjeta P2: senal sintetica (cero del puente, una fisura a 60 grados,
- *     un lift-off a 20 grados y algo de ruido) con VDD, VCC_A, V_REF, FVR y
- *     la inversion de signo del canal I
+ *     un lift-off a 20 grados, un tono de 115 Hz durante la captura 'm' y algo
+ *     de ruido) con VDD, VCC_A, V_REF, FVR y la inversion de signo del canal I
  *   - UART: lo que envia el PIC sale por stdout; las ordenes siguen un guion
  *   - EEPROM: 256 bytes que se cargan y guardan en un archivo
  *   - lazo principal: cada vez que deshabilita las interrupciones pasan 2.5 ms;
@@ -28,6 +30,8 @@
 #define PI 3.14159265358979
 #define OFFSET_ADC          3           /* LSB, en todas las conversiones */
 #define DISPAROS_POR_VUELTA 25          /* 2.5 ms cada vez que main deshabilita GIE */
+#define TONO_HZ             115.0       /* tono en I durante la captura 'm' (7.45-7.85 s) */
+#define TONO_MV             20.0
 
 /* ---- Registros simulados ---- */
 sim_adcon0_t ADCON0bits;
@@ -78,6 +82,8 @@ static uint16_t resultado_adc;
 static char rx[64];
 static int rx_n, rx_i;
 static unsigned semilla = 12345u;
+static long ultima_conversion[0x40];    /* disparo + 1 de la ultima conversion de cada canal */
+static long conversiones_i;             /* conversiones de I_OUT                              */
 
 static double ruido(void)
 {
@@ -98,6 +104,9 @@ static void senal(double t, double *ip, double *qp)
     if (t >= 3.5 && t < 4.5) {                  /* lift-off (papel) a 20 grados */
         i += 30.0 * cos(20 * PI / 180);
         q += 30.0 * sin(20 * PI / 180);
+    }
+    if (t >= 7.45 && t < 7.85) {                /* tono para comprobar la captura */
+        i += TONO_MV * sin(2 * PI * TONO_HZ * t);
     }
     *ip = i + 0.2 * ruido();
     *qp = q + 0.2 * ruido();
@@ -206,6 +215,16 @@ static void un_disparo(void)
     case 0x3B: v = 0.0; break;
     default: fallo("canal del ADC desconocido"); v = 0.0;
     }
+    /* Cada entrada se muestrea a 1000 S/s: una conversion cada 10 disparos */
+    if (ADPCH != 0x3B) {
+        if (ultima_conversion[ADPCH] != 0 && n_disparo + 1 - ultima_conversion[ADPCH] != 10) {
+            fallo("una entrada no se convierte exactamente cada 1 ms");
+        }
+        ultima_conversion[ADPCH] = n_disparo + 1;
+    }
+    if (ADPCH == 0x10) {
+        conversiones_i++;
+    }
     resultado_adc = convertir(v);
     PIR1bits.ADIF = 0;                      /* lo hace ADCC_ISR() */
     manejador_adc();
@@ -242,6 +261,12 @@ void sim_gie(int habilitar)
         NVMCON1bits.WR = 0;
     }
     if (n_disparo >= max_disparos) {
+        /* 1000 conversiones de I_OUT por segundo simulado (+-1 por el arranque) */
+        if (labs(conversiones_i - n_disparo / 10) > 1) {
+            fallo("I_OUT no se muestrea a 1000 muestras/s");
+        }
+        fprintf(stderr, "sim: %ld conversiones de I_OUT en %.1f s, todas a 1 ms de la anterior\n",
+                conversiones_i, n_disparo * (PERIODO_DISPARO_US / 1e6));
         f = fopen(archivo_eeprom, "wb");
         if (f != NULL) {
             fwrite(eeprom, 1, sizeof eeprom, f);

@@ -117,7 +117,7 @@ Cronograma de cada disparo (cada 100 µs):
  … 100 µs     el canal nuevo se asienta (~75 µs) hasta el disparo siguiente
 ```
 
-Una **trama de 10 ms** son 100 disparos: 16 rondas de los 6 canales (96 conversiones) y 4 disparos libres que convierten AVSS y se descartan. Al terminar la trama, las seis sumas pasan a una cola de 4 tramas que vacía `main()`. Si el lazo principal se retrasa (por ejemplo, al formatear números en coma flotante), las conversiones siguen a su hora y solo se pierden tramas si el retraso supera 40 ms. Las tramas perdidas se cuentan y se avisan.
+Los disparos se agrupan en **rondas de 1 ms** (10 disparos): I_OUT, Q_OUT, V_REF, VCC_A, FVR y AVSS ocupan las posiciones 0 a 5 y las 4 restantes son disparos libres que convierten AVSS y se descartan. Cada canal ocupa siempre la misma posición, así que **cada entrada se muestrea a 1000 muestras/s con un periodo fijo de 1 ms** (10 periodos del TMR2), igual que el DAQ Assistant del VI. Entre I_OUT y Q_OUT hay 100 µs: para señales DC de ≤ 50 Hz el desfase es de 1.8° como mucho a 50 Hz y no afecta. Una **trama de 10 ms** son 10 rondas (10 conversiones por canal). Al terminar la trama, las seis sumas pasan a una cola de 4 tramas que vacía `main()`. Si el lazo principal se retrasa (por ejemplo, al formatear números en coma flotante), las conversiones siguen a su hora y solo se pierden tramas si el retraso supera 40 ms. Las tramas perdidas se cuentan y se avisan.
 
 ---
 
@@ -148,7 +148,7 @@ Con 10 ns, el jitter cuesta 0.04 dB sobre un objetivo total de 60 dB: −10·log
 
 ### 4.3 En este sistema
 
-- **Señales I y Q (DC, ≤ 50 Hz):** el jitter es despreciable. Con 10 ns da 110 dB a 50 Hz; incluso con 1 µs serían 70 dB. Lo que limita es la cuantificación (74 dB por conversión), el ruido del ADC y el de la tarjeta. La suma de 16 conversiones por canal y trama gana hasta 12 dB (10·log10 16) si el ruido es de al menos ~0.5 LSB eficaces (hace de *dither*).
+- **Señales I y Q (DC, ≤ 50 Hz):** el jitter es despreciable. Con 10 ns da 110 dB a 50 Hz; incluso con 1 µs serían 70 dB. Lo que limita es la cuantificación (74 dB por conversión), el ruido del ADC y el de la tarjeta. La suma de 10 conversiones por canal y trama (1 kS/s promediado a 100 S/s) gana hasta 10 dB (10·log10 10) si el ruido es de al menos ~0.5 LSB eficaces (hace de *dither*). Con las 16 conversiones de la versión 1.2 eran 12 dB: muestrear a 1 kS/s por canal cuesta unos 2 dB de ruido en cada muestra de salida. Los indicadores del bloque promedian 100 conversiones por canal, las mismas que el bloque de LabVIEW.
 - **Restos de alta frecuencia en el pin** (por ejemplo, la portadora mal filtrada): el jitter actúa sobre ellos. El ruido que añade es A_resto · 2π · f · σ / √2 eficaces. Por ejemplo, 10 mV de amplitud de portadora a 50 kHz con σ = 10 ns dan 22 µV eficaces (95 dB bajo una senoide de fondo de escala). Conviene el filtro RC en cada entrada.
 - **Si en el futuro el PIC muestrea la señal de alterna** (demodulación digital), el requisito de 10 ns es el adecuado y la frecuencia de la señal decide el SNR (tabla de 4.2). El firmware ya muestrea con disparo por hardware, y la sección 6 permite comprobarlo.
 
@@ -168,7 +168,7 @@ Con 10 ns, el jitter cuesta 0.04 dB sobre un objetivo total de 60 dB: −10·log
 ### 5.1 HFINTOSC frente a un reloj externo
 
 - **HFINTOSC a 32 MHz** (configuración actual: RSTOSC = HFINT32, sin PLL). La hoja de datos solo da su exactitud (figura 40-6: ±2 % entre 0 y 60 °C; ±3 % hasta 85 °C; ±5 % en los extremos) y ningún dato de jitter. El ±0.25 % de PLL04 (*PLL Output Frequency Stability (Jitter)*) es del PLL, que no se usa a 32 MHz con HFINTOSC.
-- **Exactitud no es jitter.** Un error de frecuencia del 2 % solo cambia la frecuencia de muestreo (10 kS/s ± 2 %) y la escala de tiempo, sin añadir ruido. Lo que añade ruido son las variaciones rápidas del periodo. En un oscilador interno se acumulan de un ciclo al siguiente, así que el jitter entre dos disparos (3200 ciclos) puede ser bastante mayor que el de un ciclo. No se puede predecir con la hoja de datos: hay que **medirlo**.
+- **Exactitud no es jitter.** Un error de frecuencia del 2 % solo cambia la frecuencia de muestreo (1000 S/s ± 2 % por canal) y la escala de tiempo, sin añadir ruido. Lo que añade ruido son las variaciones rápidas del periodo. En un oscilador interno se acumulan de un ciclo al siguiente, así que el jitter entre dos disparos (3200 ciclos) y, sobre todo, entre dos muestras del mismo canal (1 ms, 32 000 ciclos) puede ser bastante mayor que el de un ciclo. No se puede predecir con la hoja de datos: hay que **medirlo**.
 - **Si la medida no da < 10 ns:** reloj externo en modo EC por CLKIN (**RA5, pin 2**), por ejemplo un oscilador de cristal CMOS de 32 MHz (FEXTOSC = ECH, RSTOSC = EXT1X) o uno de 8 MHz con el PLL ×4 (EXT4X). Los osciladores de cristal tienen un jitter de picosegundos. Hay que mover el LED, que ahora está en RA5. Es un cambio de hardware y no está hecho.
 
 ---
@@ -181,7 +181,7 @@ Un temporizador interno (SMT, TMR1…) **no sirve**. Su resolución es 1/FOSC = 
 
 1. Compilar en modo producción (*Make and Program Device*, no *Debug*) con `SALIDA_DISPARO 1` (por defecto). RA1 (pin 12) saca el PWM6: 10 kHz, 50 %. Cada flanco de subida es el disparo de una conversión. El firmware quita la limitación de pendiente de RA1: un flanco lento convierte el ruido de tensión en jitter aparente.
 2. Punta con el muelle de masa corto, osciloscopio de ≥ 1 GS/s.
-3. **Jitter de periodo:** disparar en un flanco de subida y mirar el flanco siguiente con un retardo horizontal de 100 µs, con persistencia infinita o histograma. La desviación estándar del histograma es σ del periodo de muestreo. Repetir con 10 periodos (1 ms). Si σ crece como √10, el jitter se acumula (ruido de frecuencia del oscilador).
+3. **Jitter de periodo:** disparar en un flanco de subida y mirar el flanco siguiente con un retardo horizontal de 100 µs, con persistencia infinita o histograma. La desviación estándar del histograma es σ del periodo de muestreo. Repetir con 10 periodos (1 ms): es el periodo de muestreo de cada canal, el que importa a 1 kS/s. Si σ crece como √10, el jitter se acumula (ruido de frecuencia del oscilador).
 4. Si el osciloscopio tiene la medida **TIE** (*time interval error*, con recuperación de reloj), da directamente la desviación de cada flanco respecto a una rejilla ideal. Es lo que degrada el SNR.
 
 El instante de muestreo real está 8 TAD + THCD después del flanco, con un número fijo de ciclos de FOSC. Lo que se mide en RA1 es, por tanto, el jitter del muestreo (más el de esos ~8 µs, despreciable frente al de 100 µs).
@@ -191,13 +191,13 @@ El instante de muestreo real está 8 TAD + THCD después del flanco, con un núm
 Es el método de la nota de TI aplicado al propio ADC. Mide el jitter efectivo **tal como lo ve el convertidor**, incluido todo lo que hay entre el oscilador y el interruptor de muestreo.
 
 1. Desconectar I_OUT de la tarjeta y conectar a **RC0** un generador senoidal de baja distorsión. Offset VDD/2 (1.85 V), 3.4 Vpp (−0.7 dBFS), salida de 50 Ω. Sin superar nunca 0–VDD.
-2. **Frecuencia baja, 1230 Hz:** el jitter no influye (82 dB con 10 ns).
+2. **Frecuencia baja, 230 Hz:** el jitter no influye (97 dB con 10 ns).
    `python pc/medir_jitter.py capturar --puerto COM5 --capturas 10 -o baja.txt`
-3. **Frecuencia alta, 51 230 Hz:** a 10 kS/s se ve en 1230 Hz (submuestreo), así que el espectro es el mismo que en 2. Con σ = 10 ns, el jitter limita el SNR a 49.8 dB, muy por debajo del suelo del ADC.
+3. **Frecuencia alta, 51 230 Hz:** a 1 kS/s se ve en 230 Hz (submuestreo, 51 230 − 51·1000), así que el espectro es el mismo que en 2. El ancho de banda del muestreo (≈ 1 MHz con 28 pF y unos kΩ) deja pasar los 51 kHz sin atenuarlos. Con σ = 10 ns, el jitter limita el SNR a 49.8 dB, muy por debajo del suelo del ADC.
    `python pc/medir_jitter.py capturar --puerto COM5 --capturas 10 -o alta.txt`
-4. `python pc/medir_jitter.py jitter baja.txt alta.txt --fin-baja 1230 --fin-alta 51230`
+4. `python pc/medir_jitter.py jitter baja.txt alta.txt --fin-baja 230 --fin-alta 51230`
 
-Cada captura (200 conversiones, 20 ms) se ajusta a una senoide de 4 parámetros (IEEE 1057) y a sus armónicos 2 a 5. El residuo es el ruido N y la senoide, la señal P (en LSB²). El jitter añade P·(2π·f·σ)², así que:
+Cada captura (200 conversiones de I_OUT, una por ms: 200 ms) se ajusta a una senoide de 4 parámetros (IEEE 1057) y a sus armónicos 2 a 5. El residuo es el ruido N y la senoide, la señal P (en LSB²). El jitter añade P·(2π·f·σ)², así que:
 
 **σ² = (N_alta − N_baja) / ((2π)² · (P_alta·f_alta² − P_baja·f_baja²))**
 
@@ -218,9 +218,9 @@ Notas:
 
 ### 7.1 Implementación
 
-En cada ronda de disparos del PWM6, después de I_OUT, Q_OUT, V_REF, VCC_A y FVR, el ADC convierte **AVSS** (canal interno 0x3B, 0 V). La suma de sus 16 conversiones por trama es el offset del ADC con la misma temporización que los demás canales. `iq_proc.c` lo resta de todos los canales antes de la normalización (`escalar()`).
+En cada ronda de disparos del PWM6, después de I_OUT, Q_OUT, V_REF, VCC_A y FVR, el ADC convierte **AVSS** (canal interno 0x3B, 0 V). La suma de sus 10 conversiones por trama es el offset del ADC con la misma temporización que los demás canales. `iq_proc.c` lo resta de todos los canales antes de la normalización (`escalar()`).
 
-- Corrige el offset (AD04: hasta ±6 LSB) y su deriva con la temperatura y con VDD, porque se mide continuamente (16 veces en cada trama de 10 ms).
+- Corrige el offset (AD04: hasta ±6 LSB) y su deriva con la temperatura y con VDD, porque se mide continuamente (una vez por ms, 10 veces en cada trama de 10 ms).
 - La orden `?` muestra el offset medido en LSB. La orden `A` (o la casilla *Autocero ADC* del programa del PC) lo activa y desactiva para comparar. En la simulación, con un offset de +3 LSB, VCC_A sale 3.651 V con autocero y 3.644 V sin él.
 - **Limitación:** un ADC unipolar no puede dar códigos negativos. Si el offset es negativo, AVSS da 0 y no se corrige: el autocero solo ve offsets positivos. Lo demás (ganancia, VDD) ya se cancela con los cocientes.
 
@@ -236,6 +236,6 @@ En cada ronda de disparos del PWM6, después de I_OUT, Q_OUT, V_REF, VCC_A y FVR
 - `app/adquisicion.c`: secuencia de canales desde la interrupción, tramas de 10 ms, cola de tramas, captura `m` y salida del disparo por RA1.
 - `app/iq_proc.c`: etapa de autocero (bit 0x10 de `etapas`). `app/comunicacion.c`: órdenes `A` y `m`, líneas `M,`, offset y muestras perdidas en `?`.
 - `main.c`: el ritmo lo marcan las tramas del ADC (sin tick de TMR2).
-- Pruebas: `tests/test_iq_proc.c` (autocero con offset conocido). `tests/sim`: el ADC simulado convierte cada 100 µs lo que la interrupción dejó en ADPCH, con +3 LSB de offset, paradas del lazo de 30 y 150 ms y la captura `m`. `tests/test_medir_jitter.py`: SINAD de un ADC ideal (74 dB) y σ simulados.
+- Pruebas: `tests/test_iq_proc.c` (autocero con offset conocido). `tests/sim`: el ADC simulado convierte cada 100 µs lo que la interrupción dejó en ADPCH, con +3 LSB de offset, y falla si alguna entrada no se convierte exactamente cada 1 ms; paradas del lazo de 30 y 150 ms y la captura `m` (un tono de 115 Hz comprueba que sus muestras van a 1 ms). `tests/test_medir_jitter.py`: SINAD de un ADC ideal (74 dB) y σ simulados.
 
 Pendiente en hardware: compilar con XC8, medir el jitter real del HFINTOSC (sección 6) y el SNR del ADC con la tarjeta.

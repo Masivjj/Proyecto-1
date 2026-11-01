@@ -1,3 +1,5 @@
 pyserial>=3.5
 matplotlib>=3.5
 numpy>=1.20
+# Solo para pc/prueba_usb6211.py con la NI USB-6211 (necesita el controlador NI-DAQmx):
+# nidaqmx>=0.9

@@ -1,6 +1,7 @@
 /*
  * adquisicion.h - Conversiones del ADC disparadas por hardware (PWM6), con
  * jitter de muestreo limitado al del oscilador (docs/analisis_adc_jitter.md).
+ * Cada entrada se muestrea a 1000 muestras/s (una conversion por ronda de 1 ms).
  */
 #ifndef ADQUISICION_H
 #define ADQUISICION_H
@@ -23,9 +24,9 @@ bool adq_leer(iq_codigos_t *c, uint32_t *numero);
  * N_COLA_TRAMAS tramas por detras). */
 uint32_t adq_tramas_perdidas(void);
 
-/* Captura de n conversiones seguidas de I_OUT, una por disparo, para medir
- * el jitter por el metodo del SNR (orden 'm'). Empieza en la trama siguiente
- * y dura n / DISPAROS_POR_TRAMA tramas, en las que no hay muestras normales.
+/* Captura de n conversiones seguidas de I_OUT, una por ronda (cada
+ * PERIODO_MUESTREO_US = 1 ms), para medir el SNR y el jitter (orden 'm').
+ * Empieza en la trama siguiente y dura n ms; las tramas normales siguen.
  * adq_pedir_captura devuelve false si ya hay una captura sin liberar. */
 bool adq_pedir_captura(uint16_t *buffer, uint16_t n);
 bool adq_captura_lista(void);       /* el buffer ya esta lleno              */

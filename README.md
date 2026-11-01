@@ -4,8 +4,8 @@ Firmware para **PIC16F18426** (MPLAB X + XC8 + **MCC Classic**) que lee las dos 
 
 - normalización ratiométrica a VCC_A = 3.7 V, división por la ganancia DC (×2, ×11, ×101) y corrección (fija) del signo invertido de I;
 - cero (I0, Q0), ángulo de calibración θ (lift-off) y rotación → señales finales I′, Q′;
-- ADC en modo básico disparado por hardware (PWM6, una conversión cada 100 µs): el instante de muestreo no depende del software y su jitter es el del oscilador; autocero del ADC con una conversión de AVSS en cada ronda;
-- captura de 200 conversiones seguidas (orden `m`) y un programa en Python que mide con ella el SNR del ADC y estima el jitter de muestreo;
+- ADC en modo básico disparado por hardware (PWM6, una conversión cada 100 µs) y **cada entrada muestreada a 1000 muestras/s** (una conversión por canal en cada ronda de 1 ms, como el DAQ del VI): el instante de muestreo no depende del software y su jitter es el del oscilador; autocero del ADC con una conversión de AVSS en cada ronda;
+- captura de 200 conversiones seguidas de I_OUT a 1 kS/s (orden `m`) y un programa en Python que mide con ella el SNR del ADC y estima el jitter de muestreo;
 - las etapas de cero, θ, ganancia, normalización a VCC_A y autocero se activan y desactivan en marcha con una tecla;
 - indicadores por bloque de 0.1 s: |V|, Fase y d estimada (×10⁻⁴);
 - traza del plano polar, envío por UART al PC y un programa en Python que dibuja el plano polar como el VI.
@@ -14,18 +14,21 @@ La especificación de partida está en [`docs/P2_IQ_procesamiento_para_PIC16F184
 
 **Avance separado: solo el ADC a 1000 muestras/s.** El proyecto [`ADC_1kSPS_PIC16F18426.X`](ADC_1kSPS_PIC16F18426.X) muestrea una señal de un generador en RC0, disparada por el PWM6 cada 1 ms, y envía cada muestra por la UART. [`pc/adc_1ksps.py`](pc/adc_1ksps.py) la dibuja con su espectro, SNR y ENOB. Guía de montaje y presentación: [`docs/avance_adc_1ksps.md`](docs/avance_adc_1ksps.md).
 
+**Prueba en la placa con LabVIEW y una NI USB-6211** (los dos proyectos): AO 0 como generador, AI 0 como referencia y un contador en RA1 miden la frecuencia de muestreo real, la amplitud y el SNR. Diagrama de bloques del VI en [`docs/pruebas_labview_usb6211.md`](docs/pruebas_labview_usb6211.md); lo mismo en Python con `nidaqmx` en [`pc/prueba_usb6211.py`](pc/prueba_usb6211.py).
+
 ## Estado de la verificación
 
 | Qué | Cómo | Resultado |
 |---|---|---|
 | Procesamiento (P1–P10) | `tests/test_iq_proc.c`: el mismo `iq_proc.c` del PIC compilado con gcc, con los vectores de la sección 9.1, las etapas activables, el autocero y casos extra | 102/102 correctas |
-| Firmware completo (`main.c` y `app/`) | `tests/sim`: se compila sin cambios contra un hardware simulado (ADC disparado cada 100 µs con +3 LSB de offset, fisura sintética, UART, EEPROM, botones, paradas del lazo de 30 y 150 ms, captura `m`, etapas desactivadas) | 34/34 comprobaciones |
+| Firmware completo (`main.c` y `app/`) | `tests/sim`: se compila sin cambios contra un hardware simulado (ADC disparado cada 100 µs con +3 LSB de offset; el simulador falla si alguna entrada no se convierte exactamente cada 1 ms; fisura sintética, UART, EEPROM, botones, paradas del lazo de 30 y 150 ms, captura `m` con un tono de 115 Hz, etapas desactivadas) | 36/36 comprobaciones |
 | Medida del jitter | `tests/test_medir_jitter.py`: ADC ideal de 12 bits (SINAD = 74 dB) y capturas simuladas con σ conocido (10 y 30 ns: error < 10 %) | 19/19 |
-| Avance ADC 1 kS/s | `tests/adc1k`: firmware simulado con la UART a su velocidad real (cada línea enviada se compara con su conversión); `tests/test_adc_1ksps.py` | 19/19 y 19/19 |
-| Nombres de registros y bits | todos los `.c` contra el `pic16f18426.h` oficial (DFP 1.32.471) con gcc; las 146 macros de pines; los `#pragma config` contra el `cfgdata` del dispositivo | sin errores |
+| Avance ADC 1 kS/s | `tests/adc1k`: firmware simulado con la UART a su velocidad real (cada línea enviada se compara con su conversión); `tests/test_adc_1ksps.py` | 19/19 y 18/18 |
+| Nombres de registros y bits | todos los `.c` de los dos proyectos contra el `pic16f18426.h` oficial (DFP 1.32.471) con gcc (repetido tras el cambio a 1 kS/s); las 146 macros de pines; los `#pragma config` contra el `cfgdata` del dispositivo | sin errores |
 | Programa del PC | `tests/test_plano_polar.py` (19/19) y prueba sin ventana con `--demo` y `--archivo` | correcto |
+| Prueba con la USB-6211 (`pc/prueba_usb6211.py`) | `tests/test_prueba_usb6211.py`: generador limitado a 0–3.3 V, fs por el contador y por el cociente de frecuencias, y fallos provocados (fs +3 %, firmware sin `# ADC:`, amplitud, pérdidas, saturación). La API de `nidaqmx` se revisó contra su código fuente (1.7.0); sin la tarjeta no se ha ejecutado | 25/25 |
 | **Compilación con XC8** | **no se ha podido ejecutar XC8 en el entorno donde se escribió** | **pendiente: compilar en MPLAB X** |
-| Hardware real (incluido el jitter del HFINTOSC) | — | pendiente: medir con `m` y `pc/medir_jitter.py` |
+| Hardware real (incluido el jitter del HFINTOSC) | — | pendiente: `pc/prueba_usb6211.py` o el VI (fs = 1000 S/s), `m` y `pc/medir_jitter.py` (jitter) |
 
 Al compilar por primera vez revisa el *Memory Summary* de la salida (la estimación es ~50 % de RAM y menos de la mitad de la Flash) y comprueba en el PC que `muestras perdidas` sigue en 0 (orden `?`).
 
@@ -47,6 +50,7 @@ P2_IQ_PIC16F18426.X/            proyecto de MPLAB X (abrir esta carpeta)
 └── nbproject/, Makefile        archivos del proyecto de MPLAB X
 pc/plano_polar.py               plano polar, gráficas, botones y grabación CSV en el PC
 pc/medir_jitter.py              SNR, ENOB y jitter de muestreo con las capturas de la orden m
+pc/prueba_usb6211.py            prueba con la NI USB-6211: generador, referencia, contador y SNR (nidaqmx)
 ADC_1kSPS_PIC16F18426.X/        avance separado: solo el ADC a 1000 muestras/s con salida serie
 pc/adc_1ksps.py                 su programa del PC: señal, espectro, SNR/ENOB y CSV
 tests/                          pruebas en el PC (make)
@@ -94,7 +98,7 @@ La configuración de los periféricos está documentada paso a paso en [`docs/co
 
 ## Funcionamiento
 
-El ADC trabaja en **modo básico** y cada conversión la dispara el flanco de subida del **PWM6** (TMR2, cada 100 µs). La interrupción de fin de conversión suma el resultado en su canal y elige el siguiente; el software no decide cuándo se muestrea. Una **trama de 10 ms** son 100 disparos: 16 rondas de I_OUT, Q_OUT, V_REF, VCC_A, FVR y AVSS (autocero), y 4 disparos libres. Las sumas de cada trama pasan a una cola de 4 tramas que vacía `main()`, que procesa la muestra. Cada 10 muestras (0.1 s, como el bloque de 100 muestras de LabVIEW) cierra un bloque. El análisis del ADC, de las referencias y del jitter está en [`docs/analisis_adc_jitter.md`](docs/analisis_adc_jitter.md).
+El ADC trabaja en **modo básico** y cada conversión la dispara el flanco de subida del **PWM6** (TMR2, cada 100 µs). La interrupción de fin de conversión suma el resultado en su canal y elige el siguiente; el software no decide cuándo se muestrea. Los disparos se agrupan en **rondas de 1 ms** (10 disparos): I_OUT, Q_OUT, V_REF, VCC_A, FVR, AVSS (autocero) y 4 disparos libres. Cada entrada ocupa siempre la misma posición de la ronda, así que **se muestrea a 1000 muestras/s con un periodo fijo de 1 ms**, como el DAQ Assistant del VI (1 kS/s por canal). Una **trama de 10 ms** son 10 rondas: la muestra de salida de cada canal es la suma de sus 10 conversiones. Las sumas de cada trama pasan a una cola de 4 tramas que vacía `main()`, que procesa la muestra. Cada 10 muestras (0.1 s: 100 conversiones por canal, como el bloque de 100 muestras de LabVIEW) cierra un bloque. La orden `?` lo confirma con la línea `# ADC: modo basico, disparo PWM6 cada 100 us, 1000 muestras/s por canal, 10 por trama`. El análisis del ADC, de las referencias y del jitter está en [`docs/analisis_adc_jitter.md`](docs/analisis_adc_jitter.md).
 
 | Etapa del VI | Dónde |
 |---|---|
@@ -148,7 +152,7 @@ M,c1,c2,...,c10                                                       captura de
 
 Los seis primeros campos de la línea `B` son los de la sección 10.7; se añaden `vcc_mV`, `G`, `banderas` (1 = VCC_A fuera de rango, se usa 3.7 V; 2 = I saturada; 4 = Q saturada; 8 = VCC_A ≥ VDD; 16 = sin lectura del FVR; 32 = se descartaron tramas: la cola estaba llena) y `etapas` (1 = cero, 2 = θ, 4 = ganancia, 8 = normalización, 16 = autocero; 31 = todas activas). La configuración se informa con líneas `# G=2 cero=ON theta=ON ganancia=ON norm=ON autocero=ON I0_uV=… Q0_uV=… theta_cdeg=…`.
 
-La orden `m` captura 200 conversiones seguidas de I_OUT, una por disparo (20 ms a 10 kS/s), y las envía como 20 líneas `M,…` entre `# m: captura de 200 conversiones de I_OUT, una cada 100 us` y `# fin captura`. Durante la captura no se forman tramas (el tiempo sigue contando: las muestras saltan 30 ms) y la traza del PIC se vacía, porque la captura usa su memoria.
+La orden `m` copia 200 conversiones seguidas de I_OUT, las mismas de las rondas (una por ms: 200 ms a 1 kS/s), y las envía como 20 líneas `M,…` entre `# m: captura de 200 conversiones de I_OUT, una cada 1000 us` y `# fin captura`. Las tramas y las muestras siguen sin hueco durante la captura. La traza del PIC se vacía y no crece mientras dura, porque la captura usa su memoria.
 
 Órdenes de un carácter (también desde cualquier terminal serie):
 
@@ -174,13 +178,13 @@ python pc/plano_polar.py --demo                    # sin hardware
 
 ## Medida del jitter (`pc/medir_jitter.py`)
 
-Con un generador senoidal en RC0 (I_OUT desconectado, offset VDD/2, 3.4 Vpp) se hacen dos series de capturas, una a 1230 Hz y otra a 51 230 Hz (que se ve en 1230 Hz por submuestreo). El jitter solo degrada la segunda, y de la diferencia de ruido sale σ:
+Con un generador senoidal en RC0 (I_OUT desconectado, offset VDD/2, 3.4 Vpp) se hacen dos series de capturas, una a 230 Hz y otra a 51 230 Hz (que a 1 kS/s se ve en 230 Hz por submuestreo). El jitter solo degrada la segunda, y de la diferencia de ruido sale σ:
 
 ```
-python pc/medir_jitter.py capturar --puerto COM5 --capturas 10 -o baja.txt     # generador a 1230 Hz
+python pc/medir_jitter.py capturar --puerto COM5 --capturas 10 -o baja.txt     # generador a 230 Hz
 python pc/medir_jitter.py capturar --puerto COM5 --capturas 10 -o alta.txt     # generador a 51 230 Hz
-python pc/medir_jitter.py jitter baja.txt alta.txt --fin-baja 1230 --fin-alta 51230
-python pc/medir_jitter.py analizar baja.txt --fin 1230 --png espectro.png      # SNR, THD, SINAD, ENOB
+python pc/medir_jitter.py jitter baja.txt alta.txt --fin-baja 230 --fin-alta 51230
+python pc/medir_jitter.py analizar baja.txt --fin 230 --png espectro.png       # SNR, THD, SINAD, ENOB
 python pc/medir_jitter.py simular --sigma 10e-9                                # sin hardware
 python pc/medir_jitter.py tabla                                                # SNR del jitter frente a f
 ```
@@ -222,7 +226,8 @@ También se pueden definir en *Project Properties > XC8 Compiler > Preprocessing
 | Alimentación | desde VCC de la tarjeta (hardware) |
 | Formato numérico | `float` de 32 bits (versión 1) |
 | Programador | cualquiera; también funciona en el simulador de MPLAB X |
-| Frecuencia de salida | 100 muestras/s, bloques de 10 |
+| Muestreo de las entradas | 1000 muestras/s por canal, como el VI (rondas de 1 ms; la sección 10.4 proponía 16 conversiones por canal y trama) |
+| Frecuencia de salida | 100 muestras/s (suma de 10 conversiones por canal), bloques de 10 |
 
 ## Pruebas en el PC
 
@@ -232,7 +237,7 @@ make          # todo
 make test     # procesamiento con los vectores de la sección 9.1 (gcc)
 make sim      # firmware completo con hardware simulado y comprobación de su salida
 make adc1k    # avance ADC 1 kS/s: firmware simulado y comprobación de lo que envía
-make pc       # programas del PC: intérprete de líneas, CSV, análisis del jitter y adc_1ksps (numpy)
+make pc       # programas del PC: intérprete de líneas, CSV, análisis del jitter, adc_1ksps y prueba_usb6211 (numpy)
 ```
 
 `make sim` deja la salida del firmware simulado en `tests/build/sim/arranque1.txt`; se puede ver con `python pc/plano_polar.py --archivo tests/build/sim/arranque1.txt`.

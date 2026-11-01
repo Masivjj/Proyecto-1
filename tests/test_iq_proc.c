@@ -252,7 +252,7 @@ static void pruebas_autocero(void)
     comprobar("autocero desactivado: VCC_A con el error del offset (V)", b.vcc,
               1.024 * (3000.0 + 5.0) / (1024.0 + 5.0), 0.0005);
     comprobar("autocero desactivado: Ip con el error del offset (mV)", m.Ip,
-              -16000.0 * 3700.0 / ((3000.0 + 5.0) * 16.0 * 2.0), 0.001);
+              -1000.0 * 3700.0 / ((3000.0 + 5.0) * 2.0), 0.001);
     offset_adc = 0;
 }
 

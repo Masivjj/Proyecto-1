@@ -127,7 +127,7 @@ Voltaje de cada muestra: **V = código × VDD / 4095**.
 
 Sin hardware (para ensayar la presentación): `python pc/adc_1ksps.py --demo` imita al PIC con un generador de 117 Hz (`--demo-f` cambia la frecuencia).
 
-**Desde LabVIEW:** *VISA Configure Serial Port* a 115200 8N1 con carácter de terminación `\n`. Luego, en un bucle, *VISA Read*: si la línea empieza por `#` es un mensaje; si no, *Decimal String To Number* × VDD / 4095.
+**Desde LabVIEW:** *VISA Configure Serial Port* a 115200 8N1 con carácter de terminación `\n`. Luego, en un bucle, *VISA Read*: si la línea empieza por `#` es un mensaje; si no, *Decimal String To Number* × VDD / 4095. La prueba completa con una NI USB-6211 (generador en AO 0, referencia en AI 0 y contador en RA1) está en [`pruebas_labview_usb6211.md`](pruebas_labview_usb6211.md), con su equivalente en Python, `pc/prueba_usb6211.py`.
 
 ## 6. Qué resultados esperar
 
@@ -142,5 +142,5 @@ Sin hardware (para ensayar la presentación): `python pc/adc_1ksps.py --demo` im
 |---|---|
 | `main.c` y `mcc_generated_files/*.c` contra el `pic16f18426.h` oficial (gcc, en producción, depuración y sin salida del disparo) | sin errores |
 | Firmware simulado en el PC (`make adc1k`): disparo cada 1 ms, UART a su velocidad real, generador de 117 Hz, paradas del lazo de 50 y 200 ms, órdenes `?`, `d`, `i` | 19/19. Cada línea enviada es su conversión, en orden; la parada de 50 ms no pierde nada; la de 200 ms pierde 74 muestras y lo avisa; 117.000 Hz, 1.5000 V, 1.6500 V |
-| Programa del PC (`tests/test_adc_1ksps.py`) | 19/19 |
+| Programa del PC (`tests/test_adc_1ksps.py`) | 18/18 |
 | **Compilación con XC8 y prueba en la placa** | **pendiente** |
