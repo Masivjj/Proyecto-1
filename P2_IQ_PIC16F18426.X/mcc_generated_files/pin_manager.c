@@ -58,7 +58,11 @@ void PIN_MANAGER_Initialize(void)
     INLVLx registers
     */
     INLVLA = 0x3F;
-    INLVLC = 0x3F;
+    /* RC5 (RX1) con umbral TTL: VIH = 0.25 VDD + 0.8 V (D321), 1.85 V con
+     * VDD = 4.2 V. Con Schmitt (0.8 VDD, D322) un adaptador USB-serie de
+     * 3.3 V no llegaria a VIH si VDD pasa de 4.1 V (celda Li cargada). Se
+     * fija antes de habilitar la EUSART (hoja de datos, 14.4.5). */
+    INLVLC = 0x1F;
 
 
     RX1PPS = 0x15;   //RC5->EUSART1:RX1;

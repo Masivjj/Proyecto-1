@@ -78,6 +78,8 @@ La configuración de los periféricos está documentada paso a paso en [`docs/co
 
 ## Conexiones
 
+Esquema completo con lista de componentes, para los tres modos de reloj: [`docs/esquema_conexiones.html`](docs/esquema_conexiones.html) (abrir en el navegador).
+
 | PIC16F18426 (14 pines) | Señal | Conexión |
 |---|---|---|
 | 1 VDD | alimentación | VCC de la tarjeta (no VCC_A) |

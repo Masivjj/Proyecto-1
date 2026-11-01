@@ -68,6 +68,8 @@ En *Pin Manager: Grid View* marca los pines y, en *Pin Module*, pon el nombre (*
 
 RA0 (ICSPDAT) queda sin usar, en analógico. RA3 es MCLR (pull-up externo de 10 kΩ).
 
+**RC5 (RX1): nivel de entrada TTL** (en *Pin Module*, quitar la marca de *INLVL* o *ST* de RC5; `INLVLC = 0x1F`). Con el umbral Schmitt (0.8·VDD) un adaptador USB-serie de 3.3 V no llega cuando la VDD, que viene de la celda Li de la tarjeta, pasa de 4.1 V. Con TTL basta con 0.25·VDD + 0.8 V (1.85 V a 4.2 V).
+
 RA1 (ICSPCLK) **no se asigna en MCC**: en las compilaciones de producción `app/adquisicion.c` saca por él la salida del PWM6 (`RA1PPS = 0x0D`, digital, salida, sin limitar la pendiente) para medir el jitter del disparo con un osciloscopio. En las de depuración (`__DEBUG`) o con `SALIDA_DISPARO = 0` queda libre para el depurador. Ver `docs/analisis_adc_jitter.md`.
 
 ---

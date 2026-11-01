@@ -1,0 +1,469 @@
+<title>Conexiones PIC16F18426 P2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Hoja de plano técnico: papel frío, tinta pizarra, cobre solo para lo que cambia con el modo de reloj */
+:root {
+  --bg: #f2f4f3;
+  --paper: #fbfcfc;
+  --ink: #1b2422;
+  --muted: #5b6764;
+  --line: #cfd6d3;
+  --wire: #1f5a85;
+  --acc: #b5651d;
+  --acc-soft: #f5e6d6;
+  --warn: #9b2c2c;
+  --warn-soft: #f6e3e3;
+  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111615; --paper: #171d1c; --ink: #dce4e1; --muted: #93a19d; --line: #2f3a37;
+    --wire: #79b6e3; --acc: #e5a25c; --acc-soft: #3a2a19; --warn: #f0a3a3; --warn-soft: #3b1f1f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111615; --paper: #171d1c; --ink: #dce4e1; --muted: #93a19d; --line: #2f3a37;
+  --wire: #79b6e3; --acc: #e5a25c; --acc-soft: #3a2a19; --warn: #f0a3a3; --warn-soft: #3b1f1f;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+main { max-width: 1160px; margin: 0 auto; display: grid; gap: 28px; }
+h1, h2 { text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 1.9rem; font-weight: 700; }
+h2 { font-size: 1.2rem; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 10px; }
+.modes { display: flex; flex-wrap: wrap; gap: 8px; }
+.modes button {
+  font: 500 0.92rem var(--font-body); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; cursor: pointer;
+}
+.modes button[aria-pressed="true"] { border-color: var(--acc); background: var(--acc-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--acc); }
+.modes button:focus-visible, .copy:focus-visible { outline: 2px solid var(--wire); outline-offset: 2px; }
+.modeinfo { font-size: 0.92rem; color: var(--muted); }
+.modeinfo b { color: var(--ink); font-weight: 600; }
+section { display: grid; gap: 12px; }
+.sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; overflow-x: auto; }
+.sheet svg { display: block; width: 100%; min-width: 900px; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 22px; height: 0; border-top: 2px solid var(--wire); display: inline-block; }
+.sw.acc { border-color: var(--acc); }
+.sw.opt { border-top-style: dashed; border-color: var(--muted); }
+/* SVG */
+.w { stroke: var(--wire); stroke-width: 1.6; fill: none; }
+.s { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+.chg .w, .chg .s { stroke: var(--acc); }
+.chg .t { fill: var(--acc); }
+.opt { stroke-dasharray: 4 3; }
+.t { fill: var(--ink); font-family: var(--font-mono); font-size: 12px; }
+.tm { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.chip { fill: var(--paper); stroke: var(--ink); stroke-width: 2; }
+.dot { fill: var(--wire); }
+.chg .dot { fill: var(--acc); }
+.flag { fill: var(--paper); stroke: var(--wire); stroke-width: 1.4; }
+.chg .flag { stroke: var(--acc); }
+.fillink { fill: var(--ink); }
+.pinno { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.pinname { fill: var(--ink); font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+.chg .pinname { fill: var(--acc); }
+/* Tablas y tarjetas */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.card h3 { margin: 0; font-size: 0.98rem; font-weight: 600; }
+.card ol, .card ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.9rem; }
+.mono { font-family: var(--font-mono); font-size: 0.86em; }
+.tablewrap { overflow-x: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.ref { font-family: var(--font-mono); white-space: nowrap; }
+tr.changed td:first-child { box-shadow: inset 3px 0 0 var(--acc); }
+.chipopt { font-family: var(--font-mono); font-size: 0.72rem; border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; color: var(--muted); white-space: nowrap; }
+.chipmode { font-family: var(--font-mono); font-size: 0.72rem; border: 1px solid var(--acc); color: var(--acc); border-radius: 3px; padding: 0 5px; white-space: nowrap; }
+.warnbox { background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 4px; padding: 14px 16px; display: grid; gap: 8px; }
+.warnbox h3 { margin: 0; color: var(--warn); font-size: 1rem; }
+.warnbox ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 0.92rem; }
+.foot { font-size: 0.82rem; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .modes button { transition: background-color .15s, border-color .15s; } }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Detector de fisuras por corrientes de Eddy · firmware 1.4 · PIC16F18426 DIP-14</div>
+    <h1>Conexiones del PIC16F18426 con la tarjeta P2</h1>
+    <p>Esquema, pines y lista de componentes para montar el PIC en protoboard o en placa. El reloj se elige al compilar y cambia cuatro pines. Elige el modo que vas a montar:</p>
+    <div class="modes" role="group" aria-label="Modo de reloj">
+      <button type="button" id="m-interno" data-mode="interno" aria-pressed="true">Reloj interno (32 MHz)</button>
+      <button type="button" id="m-cristal" data-mode="cristal" aria-pressed="false">Cristal de 4 MHz</button>
+      <button type="button" id="m-oscilador" data-mode="oscilador" aria-pressed="false">Oscilador de 4 MHz</button>
+    </div>
+    <div class="modeinfo" id="modeinfo"></div>
+  </header>
+
+  <section aria-labelledby="h-esq">
+    <h2 id="h-esq">Esquema</h2>
+    <div class="sheet"><svg id="esquema" viewBox="0 0 1120 690" role="img" aria-label="Esquema de conexiones del PIC16F18426"></svg></div>
+    <div class="legend">
+      <span><i class="sw"></i>conexión</span>
+      <span><i class="sw acc"></i>cambia con el modo de reloj</span>
+      <span><i class="sw opt"></i>opcional</span>
+      <span>Las etiquetas de red (VDD, ICSP 4, J805.1…) se conectan entre sí y con los conectores de abajo.</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-con">
+    <h2 id="h-con">Conectores</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>J3 · Tarjeta P2 (bornera J805)</h3>
+        <ol class="mono">
+          <li>J805.1 I_OUT → R6 1 kΩ → RC0 (pin 10)</li>
+          <li>J805.2 V_REF → R8 1 kΩ → RC2 (pin 8)</li>
+          <li>J805.3 Q_OUT → R7 1 kΩ → RC1 (pin 9)</li>
+          <li>J805.4 V_REF (duplicado): sin conectar</li>
+          <li>J805.5 VCC_A → R9 1 kΩ → RC3 (pin 7)</li>
+          <li>J805.6 GND → VSS (pin 14)</li>
+        </ol>
+        <p style="font-size:.88rem">Y un cable aparte desde el <b>VCC de la tarjeta</b> (no VCC_A) a VDD (pin 1): 3.0–4.2 V de la celda Li.</p>
+      </div>
+      <div class="card">
+        <h3>J2 · Adaptador USB-serie (3.3 V)</h3>
+        <ol class="mono">
+          <li>TX del adaptador → R4 1 kΩ → RC5 / RX (pin 5)</li>
+          <li>RX del adaptador ← R5 1 kΩ ← RC4 / TX (pin 6)</li>
+          <li>GND → VSS (pin 14)</li>
+        </ol>
+        <p style="font-size:.88rem">115200 8N1. El VCC del adaptador <b>no se conecta</b>: el PIC se alimenta de la tarjeta. Sirven adaptadores con lógica de 3.3 V (CP2102, CH340 o FT232R con VCCIO a 3.3 V). Nunca uno de 5 V.</p>
+      </div>
+      <div class="card">
+        <h3>J1 · Programación ICSP (PICkit 4/5, Snap)</h3>
+        <ol class="mono">
+          <li>MCLR/VPP → pin 4</li>
+          <li>VDD → pin 1</li>
+          <li>GND → pin 14</li>
+          <li>PGD → RA0 (pin 13)</li>
+          <li>PGC → RA1 (pin 12)</li>
+          <li>sin conectar</li>
+        </ol>
+        <p style="font-size:.88rem">Con la tarjeta alimentando el PIC, configura el programador para <b>no</b> dar tensión.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-pines">
+    <h2 id="h-pines">Pines</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Pin</th><th>Puerto</th><th>Conexión</th></tr></thead>
+        <tbody id="pines"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-bom">
+    <h2 id="h-bom">Lista de componentes</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Ref.</th><th>Componente</th><th>Valor / tipo</th><th>Cant.</th><th>Por qué</th></tr></thead>
+        <tbody id="bom"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="warnbox">
+    <h3>Antes de alimentar</h3>
+    <ul>
+      <li><b>Masa común:</b> VSS del PIC, GND de la tarjeta (J805.6), GND del adaptador y del programador unidos.</li>
+      <li><b>VCC_A no debe superar la VDD del PIC.</b> Si VCC_A puede ser mayor (vienen de puntos distintos de la tarjeta), monta el divisor de 2 × 10 kΩ en RC3 y compila con <span class="mono">DIVISOR_VCCA=2</span>.</li>
+      <li><b>Ninguna señal fuera de 0–VDD</b> en ningún pin, tampoco con el PIC apagado. Las resistencias de 1 kΩ en serie limitan la corriente si ocurre.</li>
+      <li><b>Adaptador USB-serie a 3.3 V.</b> RC5 se configura con umbral TTL (firmware), así que basta 1.85 V aunque la celda esté a 4.2 V.</li>
+      <li id="warn-modo"></li>
+    </ul>
+  </div>
+
+  <p class="foot">Valores comprobados con la hoja de datos DS40001985C: conexiones mínimas (sección 2: 100 nF a ≤ 6 mm de VDD, MCLR con 10 kΩ y ≤ 470 Ω en serie), impedancia de fuente del ADC ≤ 10 kΩ (AD08), umbrales de entrada (D321, D322), pines OSC1/OSC2 y modos XT/ECM (OS8, OS3). El firmware correspondiente está en <span class="mono">P2_IQ_PIC16F18426.X</span>; el detalle del reloj externo, en <span class="mono">docs/reloj_externo_4MHz.md</span>.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var MODES = {
+    interno: { info: "<b>Configuración <span class='mono'>default</span> de MPLAB X</b> (RELOJ=0). HFINTOSC a 32 MHz. LED en RA5, “Calibrar θ” en RA4, RA1 saca el disparo del ADC (10 kHz) para el osciloscopio.",
+               warn: "<b>RA1 en producción</b> es una salida de 10 kHz: no le conectes nada más que una punta de osciloscopio o un contador." },
+    cristal: { info: "<b>Configuración <span class='mono'>cristal_4MHz</span></b> (RELOJ=1). Cristal de 4 MHz en modo XT entre RA5 y RA4, PLL ×4 = 16 MHz. El LED pasa a RA0 y “Calibrar θ” a RA1.",
+               warn: "<b>RA0 y RA1 son también del programador.</b> No pulses “Calibrar θ” mientras programas; si el LED en RA0 da errores al programar, desconéctalo. El cristal y sus condensadores, a menos de 1 cm de los pines 2 y 3." },
+    oscilador: { info: "<b>Configuración <span class='mono'>oscilador_4MHz</span></b> (RELOJ=2). Oscilador de cuarzo de 4 MHz con salida CMOS a RA5 (modo ECM), PLL ×4 = 16 MHz. Solo el LED cambia: pasa a RA0.",
+                 warn: "<b>El oscilador se alimenta de la VDD del PIC</b> (3.0–4.2 V): su salida debe llegar a VDD. Uno alimentado con un regulador de 3.3 V no alcanzaría el umbral de CLKIN con la celda cargada." }
+  };
+
+  var NS = "http://www.w3.org/2000/svg";
+  var svg = document.getElementById("esquema");
+  var CHIP = { x1: 440, x2: 640, y1: 106, y2: 626 };
+  function rowY(i) { return 150 + i * 72; }
+
+  function el(name, attrs, parent, text) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    (parent || svg).appendChild(e);
+    return e;
+  }
+  function line(g, x1, y1, x2, y2, cls) { return el("line", { x1: x1, y1: y1, x2: x2, y2: y2, "class": cls || "w" }, g); }
+  function txt(g, x, y, s, anchor, cls) { return el("text", { x: x, y: y, "text-anchor": anchor || "middle", "class": cls || "t" }, g, s); }
+  function ground(g, x, y) {
+    line(g, x, y, x, y + 12, "s");
+    line(g, x - 10, y + 12, x + 10, y + 12, "s");
+    line(g, x - 6, y + 16, x + 6, y + 16, "s");
+    line(g, x - 2, y + 20, x + 2, y + 20, "s");
+  }
+
+  /* Elementos de una fila: se dibujan desde el pin hacia fuera (d = -1 izquierda, +1 derecha) */
+  function drawChain(g, x0, y, d, items) {
+    var x = x0;
+    items.forEach(function (it) {
+      var opt = it.opt ? " opt" : "";
+      if (it.t === "w") {
+        line(g, x, y, x + d * it.len, y, "w" + opt); x += d * it.len;
+      } else if (it.t === "R") {
+        var a = x + d * 10, b = x + d * 46, pts = [];
+        line(g, x, y, a, y, "w" + opt);
+        for (var k = 0; k <= 6; k++) pts.push((a + d * k * 6) + "," + (y + (k === 0 || k === 6 ? 0 : (k % 2 ? -6 : 6))));
+        el("polyline", { points: pts.join(" "), "class": "s" + opt }, g);
+        line(g, b, y, x + d * 56, y, "w" + opt);
+        txt(g, x + d * 28, y - 12, it.ref + " " + it.val, "middle", it.opt ? "tm" : "t");
+        x += d * 56;
+      } else if (it.t === "C") {
+        el("circle", { cx: x, cy: y, r: 2.6, "class": "dot" }, g);
+        line(g, x, y, x, y + 10, "w" + opt);
+        line(g, x - 10, y + 10, x + 10, y + 10, "s" + opt);
+        line(g, x - 10, y + 16, x + 10, y + 16, "s" + opt);
+        line(g, x, y + 16, x, y + 24, "w" + opt);
+        ground(g, x, y + 24);
+        txt(g, x + 14, y + 34, it.ref + " " + it.val, "start", it.opt ? "tm" : "t");
+        line(g, x, y, x + d * 26, y, "w");
+        x += d * 26;
+      } else if (it.t === "LED") {
+        var c = x + d * 25;
+        line(g, x, y, c - d * 8, y);
+        el("polygon", { points: (c - d * 8) + "," + (y - 8) + " " + (c - d * 8) + "," + (y + 8) + " " + (c + d * 6) + "," + y, "class": "s" }, g);
+        line(g, c + d * 6, y - 8, c + d * 6, y + 8, "s");
+        line(g, c + d * 6, y, x + d * 44, y);
+        line(g, c - 2, y - 11, c + 4, y - 17, "s"); line(g, c + 3, y - 10, c + 9, y - 16, "s");
+        txt(g, c, y - 22, it.ref + " LED");
+        x += d * 44;
+      } else if (it.t === "SW") {
+        var p = x + d * 12, q = x + d * 40;
+        line(g, x, y, p, y);
+        el("circle", { cx: p, cy: y, r: 2.6, "class": "fillink" }, g);
+        el("circle", { cx: q, cy: y, r: 2.6, "class": "fillink" }, g);
+        line(g, p, y - 3, q + d * 2, y - 12, "s");
+        line(g, (p + q) / 2, y - 8, (p + q) / 2, y - 16, "s");
+        line(g, (p + q) / 2 - 6, y - 16, (p + q) / 2 + 6, y - 16, "s");
+        txt(g, (p + q) / 2, y - 22, it.ref + " " + it.name);
+        line(g, q, y, x + d * 52, y);
+        x += d * 52;
+      } else if (it.t === "G") {
+        ground(g, x, y);
+      } else if (it.t === "N") {
+        var wN = it.name.length * 7.3 + 18, h = 18;
+        var xs = d > 0 ? x : x - wN;
+        var pts2 = d > 0
+          ? [x, y, x + 8, y - h / 2, x + wN, y - h / 2, x + wN, y + h / 2, x + 8, y + h / 2]
+          : [x, y, x - 8, y - h / 2, x - wN, y - h / 2, x - wN, y + h / 2, x - 8, y + h / 2];
+        el("polygon", { points: pts2.join(" "), "class": "flag" }, g);
+        txt(g, xs + wN / 2 + d * 4, y + 4, it.name);
+        x += d * wN;
+      } else if (it.t === "TAP") {
+        el("circle", { cx: x + d * 14, cy: y, r: 2.6, "class": "dot" }, g);
+        line(g, x, y, x + d * 28, y);
+        line(g, x + d * 14, y, x + d * 14, y + 20);
+        var wT = it.name.length * 7.3 + 14;
+        el("rect", { x: x + d * 14 - wT / 2, y: y + 20, width: wT, height: 18, rx: 2, "class": "flag" }, g);
+        txt(g, x + d * 14, y + 33, it.name);
+        x += d * 28;
+      } else if (it.t === "TP") {
+        el("circle", { cx: x + d * 6, cy: y, r: 6, "class": "flag" }, g);
+        txt(g, x + d * 18, y + 4, it.name, d > 0 ? "start" : "end");
+      } else if (it.t === "FREE") {
+        txt(g, x + d * 6, y + 4, it.name, d > 0 ? "start" : "end", "tm");
+      } else if (it.t === "BOX") {
+        var bw = 132, bh = 54, bx = d > 0 ? x : x - bw;
+        el("rect", { x: bx, y: y - 18, width: bw, height: bh, rx: 3, "class": "flag" }, g);
+        txt(g, bx + bw / 2, y - 2, it.title);
+        txt(g, bx + bw / 2, y + 14, it.l1, "middle", "tm");
+        txt(g, bx + bw / 2, y + 28, it.l2, "middle", "tm");
+        txt(g, d > 0 ? bx + 6 : bx + bw - 6, y + 4, "OUT", d > 0 ? "start" : "end", "tm");
+      }
+    });
+  }
+
+  function crystal(g) {
+    var y2 = rowY(1), y3 = rowY(2), xs = CHIP.x1 - 30, xn = 330, xc = 236, ym = (y2 + y3) / 2;
+    [y2, y3].forEach(function (y) { line(g, xs, y, xc, y); });
+    el("circle", { cx: xn, cy: y2, r: 2.6, "class": "dot" }, g);
+    el("circle", { cx: xn, cy: y3, r: 2.6, "class": "dot" }, g);
+    line(g, xn, y2, xn, ym - 13); line(g, xn - 11, ym - 13, xn + 11, ym - 13, "s");
+    el("rect", { x: xn - 8, y: ym - 8, width: 16, height: 16, "class": "s" }, g);
+    line(g, xn - 11, ym + 13, xn + 11, ym + 13, "s"); line(g, xn, ym + 13, xn, y3);
+    txt(g, xn + 18, ym + 4, "Y1 4 MHz", "start");
+    drawChain(g, xc, y2, -1, [{ t: "C", ref: "C7", val: "22 pF" }]);
+    drawChain(g, xc, y3, -1, [{ t: "C", ref: "C8", val: "22 pF" }]);
+  }
+
+  /* Pines. izq: 1..7 de arriba abajo; der: 14..8 de arriba abajo */
+  function pins(mode) {
+    var ext = mode !== "interno", cri = mode === "cristal";
+    var left = [
+      { n: 1, p: "VDD", items: [{ t: "w", len: 20 }, { t: "C", ref: "C1", val: "100 nF" }, { t: "w", len: 74 }, { t: "C", ref: "C2", val: "10 µF" }, { t: "w", len: 70 }, { t: "N", name: "VDD" }] },
+      { n: 2, p: cri ? "RA5/OSC1" : ext ? "RA5/CLKIN" : "RA5", chg: true,
+        items: cri ? null : ext
+          ? [{ t: "w", len: 50 }, { t: "BOX", title: "X1 oscilador 4 MHz", l1: "VDD, GND y 100 nF", l2: "salida CMOS 0–VDD" }]
+          : [{ t: "w", len: 20 }, { t: "R", ref: "R3", val: "1 kΩ" }, { t: "LED", ref: "D1" }, { t: "G" }] },
+      { n: 3, p: cri ? "RA4/OSC2" : "RA4", chg: true,
+        items: cri ? null : [{ t: "w", len: 20 }, { t: "SW", ref: "SW2", name: "Calibrar θ" }, { t: "G" }] },
+      { n: 4, p: "MCLR", items: [{ t: "R", ref: "R2", val: "470 Ω", opt: true }, { t: "TAP", name: "ICSP 1" }, { t: "R", ref: "R1", val: "10 kΩ" }, { t: "N", name: "VDD" }] },
+      { n: 5, p: "RC5 RX", items: [{ t: "w", len: 20 }, { t: "R", ref: "R4", val: "1 kΩ" }, { t: "w", len: 10 }, { t: "N", name: "J2 TX adaptador" }] },
+      { n: 6, p: "RC4 TX", items: [{ t: "w", len: 20 }, { t: "R", ref: "R5", val: "1 kΩ" }, { t: "w", len: 10 }, { t: "N", name: "J2 RX adaptador" }] },
+      { n: 7, p: "RC3 AN", items: [{ t: "w", len: 14 }, { t: "R", ref: "R9", val: "1 kΩ" }, { t: "C", ref: "C6", val: "100 nF", opt: true }, { t: "w", len: 10 }, { t: "N", name: "J805.5 VCC_A" }] }
+    ];
+    var right = [
+      { n: 14, p: "VSS", items: [{ t: "w", len: 40 }, { t: "N", name: "GND" }] },
+      { n: 13, p: "RA0", chg: true, items: ext
+          ? [{ t: "TAP", name: "ICSP 4 PGD" }, { t: "R", ref: "R3", val: "1 kΩ" }, { t: "LED", ref: "D1" }, { t: "G" }]
+          : [{ t: "TAP", name: "ICSP 4 PGD" }, { t: "FREE", name: "solo programación" }] },
+      { n: 12, p: "RA1", chg: true, items: cri
+          ? [{ t: "TAP", name: "ICSP 5 PGC" }, { t: "w", len: 10 }, { t: "SW", ref: "SW2", name: "Calibrar θ" }, { t: "G" }]
+          : [{ t: "TAP", name: "ICSP 5 PGC" }, { t: "w", len: 20 }, { t: "TP", name: "TP1 disparo ADC 10 kHz" }] },
+      { n: 11, p: "RA2", items: [{ t: "w", len: 20 }, { t: "SW", ref: "SW1", name: "Fijar cero" }, { t: "G" }] },
+      { n: 10, p: "RC0 AN", items: [{ t: "w", len: 14 }, { t: "R", ref: "R6", val: "1 kΩ" }, { t: "C", ref: "C3", val: "100 nF", opt: true }, { t: "w", len: 10 }, { t: "N", name: "J805.1 I_OUT" }] },
+      { n: 9, p: "RC1 AN", items: [{ t: "w", len: 14 }, { t: "R", ref: "R7", val: "1 kΩ" }, { t: "C", ref: "C4", val: "100 nF", opt: true }, { t: "w", len: 10 }, { t: "N", name: "J805.3 Q_OUT" }] },
+      { n: 8, p: "RC2 AN", items: [{ t: "w", len: 14 }, { t: "R", ref: "R8", val: "1 kΩ" }, { t: "C", ref: "C5", val: "100 nF", opt: true }, { t: "w", len: 10 }, { t: "N", name: "J805.2 V_REF" }] }
+    ];
+    return { left: left, right: right };
+  }
+
+  function drawSchematic(mode) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var P = pins(mode);
+    el("rect", { x: CHIP.x1, y: CHIP.y1, width: CHIP.x2 - CHIP.x1, height: CHIP.y2 - CHIP.y1, rx: 4, "class": "chip" });
+    el("path", { d: "M " + (540 - 14) + " " + CHIP.y1 + " a 14 14 0 0 0 28 0", "class": "s" });
+    txt(null, 540, 398, "PIC16F18426", "middle", "pinname");
+    txt(null, 540, 414, "DIP-14 · vista superior", "middle", "tm");
+    txt(null, 540, 662, "U1", "middle", "t");
+    P.left.forEach(function (pin, i) {
+      var y = rowY(i), g = el("g", { "class": pin.chg ? "chg" : "" });
+      line(g, CHIP.x1 - 30, y, CHIP.x1, y, "s");
+      txt(g, CHIP.x1 - 6, y - 5, String(pin.n), "end", "pinno");
+      txt(g, CHIP.x1 + 10, y + 4, pin.p, "start", "pinname");
+      if (pin.items) drawChain(g, CHIP.x1 - 30, y, -1, pin.items);
+      else if (i === 1) crystal(g);
+    });
+    P.right.forEach(function (pin, i) {
+      var y = rowY(i), g = el("g", { "class": pin.chg ? "chg" : "" });
+      line(g, CHIP.x2, y, CHIP.x2 + 30, y, "s");
+      txt(g, CHIP.x2 + 6, y - 5, String(pin.n), "start", "pinno");
+      txt(g, CHIP.x2 - 10, y + 4, pin.p, "end", "pinname");
+      drawChain(g, CHIP.x2 + 30, y, 1, pin.items);
+    });
+  }
+
+  /* Tabla de pines */
+  var PINTAB = [
+    [1, "VDD", "VCC de la tarjeta P2 (3.0–4.2 V), C1 100 nF y C2 10 µF a VSS, ICSP 2", null],
+    [2, "RA5", { interno: "R3 1 kΩ → LED D1 → VSS", cristal: "OSC1: cristal Y1 4 MHz y C7 22 pF a VSS", oscilador: "CLKIN: salida del oscilador X1 de 4 MHz" }],
+    [3, "RA4", { interno: "SW2 “Calibrar θ” → VSS (pull-up interno)", cristal: "OSC2: cristal Y1 y C8 22 pF a VSS", oscilador: "SW2 “Calibrar θ” → VSS (pull-up interno)" }],
+    [4, "RA3 / MCLR", "R1 10 kΩ a VDD; ICSP 1 (con R2 ≤ 470 Ω opcional)", null],
+    [5, "RC5 (RX)", "← R4 1 kΩ ← TX del adaptador USB-serie (entrada TTL)", null],
+    [6, "RC4 (TX)", "→ R5 1 kΩ → RX del adaptador USB-serie", null],
+    [7, "RC3 / ANC3", "← R9 1 kΩ ← J805.5 VCC_A (C6 100 nF opcional; divisor 2 × 10 kΩ si VCC_A > VDD)", null],
+    [8, "RC2 / ANC2", "← R8 1 kΩ ← J805.2 V_REF (C5 100 nF opcional)", null],
+    [9, "RC1 / ANC1", "← R7 1 kΩ ← J805.3 Q_OUT (C4 100 nF opcional)", null],
+    [10, "RC0 / ANC0", "← R6 1 kΩ ← J805.1 I_OUT (C3 100 nF opcional)", null],
+    [11, "RA2", "SW1 “Fijar cero” → VSS (pull-up interno)", null],
+    [12, "RA1 / ICSPCLK", { interno: "ICSP 5; en producción, salida del disparo del ADC (10 kHz): TP1", cristal: "ICSP 5 y SW2 “Calibrar θ” → VSS (pull-up interno)", oscilador: "ICSP 5; en producción, salida del disparo del ADC (10 kHz): TP1" }],
+    [13, "RA0 / ICSPDAT", { interno: "ICSP 4 (sin otro uso)", cristal: "ICSP 4 y R3 1 kΩ → LED D1 → VSS", oscilador: "ICSP 4 y R3 1 kΩ → LED D1 → VSS" }],
+    [14, "VSS", "GND común: J805.6, adaptador, programador", null]
+  ];
+
+  /* Lista de componentes: m = modos en que se monta (i, c, o) */
+  var BOM = [
+    ["U1", "Microcontrolador", "PIC16F18426-I/P (DIP-14) y zócalo DIP-14", 1, "El firmware es para este modelo exacto (PIC16LF18426 no sirve con 4.2 V).", "ico"],
+    ["C1", "Condensador cerámico", "100 nF X7R, 25–50 V", 1, "Desacoplo de VDD a ≤ 6 mm de los pines 1 y 14 (hoja de datos, 2.2).", "ico"],
+    ["C2", "Condensador", "10 µF, 16 V (cerámico o electrolítico)", 1, "Tanque si la alimentación llega por cable desde la tarjeta (4.7–47 µF).", "ico"],
+    ["R1", "Resistencia", "10 kΩ ¼ W", 1, "Pull-up de MCLR (recomendado ≤ 10 kΩ).", "ico"],
+    ["R2", "Resistencia", "470 Ω ¼ W", 1, "Opcional: en serie con MCLR, protege el pin (≤ 470 Ω).", "ico", true],
+    ["R3, D1", "Resistencia y LED", "1 kΩ + LED de 3 mm", 1, "LED de estado y alarma; ~1.5–2 mA con VDD de 3.7 V.", "ico"],
+    ["SW1, SW2", "Pulsador táctil", "6 × 6 mm, normalmente abierto", 2, "“Fijar cero” y “Calibrar θ”, a VSS; el pull-up es interno.", "ico"],
+    ["R4, R5", "Resistencia", "1 kΩ ¼ W", 2, "En serie con RX y TX: limitan la corriente si el adaptador o el PIC están apagados.", "ico"],
+    ["R6–R9", "Resistencia", "1 kΩ ¼ W", 4, "En serie con I_OUT, Q_OUT, V_REF y VCC_A (fuente ≤ 10 kΩ para el ADC, AD08).", "ico"],
+    ["C3–C6", "Condensador cerámico", "100 nF X7R", 4, "Opcional: con R6–R9 forman un filtro de 1.6 kHz; quitan ruido y restos de portadora.", "ico", true],
+    ["R10, R11", "Resistencia", "10 kΩ 1 %", 2, "Opcional: divisor 1:2 en VCC_A si puede superar la VDD (compilar con DIVISOR_VCCA=2).", "ico", true],
+    ["J1", "Tira de pines", "1 × 6, paso 2.54 mm", 1, "ICSP para el PICkit 4/5 o el MPLAB Snap.", "ico"],
+    ["J2", "Tira de pines + adaptador", "1 × 3 (TX, RX, GND); adaptador USB-serie de 3.3 V", 1, "CP2102, CH340 o FT232R con VCCIO a 3.3 V. Su VCC no se conecta.", "ico"],
+    ["J3", "Bornera o cable", "6 vías a J805 + 1 cable a VCC de la tarjeta", 1, "Señales I/Q, referencias, GND y alimentación del PIC.", "ico"],
+    ["TP1", "Punto de prueba", "Pin o lazo", 1, "Disparo del ADC (RA1, 10 kHz) para el osciloscopio o el contador de la USB-6211.", "io", true],
+    ["Y1", "Cristal de cuarzo", "4.000 MHz, fundamental, HC-49/US, CL = 16–18 pF", 1, "Modo XT entre RA5 (OSC1) y RA4 (OSC2).", "c"],
+    ["C7, C8", "Condensador cerámico", "22 pF C0G/NP0 (27 pF si CL = 18 pF)", 2, "Carga del cristal: C ≈ 2·(CL − 5 pF), a VSS junto a los pines 2 y 3.", "c"],
+    ["Rs", "Resistencia", "470 Ω–1 kΩ", 1, "Opcional: en serie con OSC2 si el fabricante del cristal limita la potencia.", "c", true],
+    ["X1", "Oscilador de cuarzo", "4.000 MHz, salida CMOS, alimentación que cubra 3.0–4.2 V", 1, "A RA5 (CLKIN). Alimentado desde la VDD del PIC.", "o"],
+    ["C9", "Condensador cerámico", "100 nF", 1, "Desacoplo del oscilador X1, junto a sus patas.", "o"]
+  ];
+
+  function render(mode) {
+    if (!MODES[mode]) mode = "interno";
+    var key = mode.charAt(0);
+    document.querySelectorAll(".modes button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-mode") === mode));
+    });
+    document.getElementById("modeinfo").innerHTML = MODES[mode].info;
+    document.getElementById("warn-modo").innerHTML = MODES[mode].warn;
+    drawSchematic(mode);
+
+    var pt = document.getElementById("pines"); pt.innerHTML = "";
+    PINTAB.forEach(function (r) {
+      var tr = document.createElement("tr"), varies = typeof r[2] === "object";
+      if (varies) tr.className = "changed";
+      [String(r[0]), r[1], varies ? r[2][mode] : r[2]].forEach(function (c, k) {
+        var td = document.createElement("td"); td.textContent = c; if (k < 2) td.className = "ref"; tr.appendChild(td);
+      });
+      pt.appendChild(tr);
+    });
+
+    var bt = document.getElementById("bom"); bt.innerHTML = "";
+    BOM.filter(function (r) { return r[5].indexOf(key) >= 0; }).forEach(function (r) {
+      var tr = document.createElement("tr");
+      if (r[5].length === 1) tr.className = "changed";
+      var tds = [r[0], r[1], r[2], String(r[3]), r[4]];
+      tds.forEach(function (c, k) {
+        var td = document.createElement("td"); td.textContent = c;
+        if (k === 0) td.className = "ref";
+        if (k === 1 && r[6]) { td.appendChild(document.createTextNode(" ")); var s = document.createElement("span"); s.className = "chipopt"; s.textContent = "opcional"; td.appendChild(s); }
+        if (k === 1 && r[5].length === 1) { td.appendChild(document.createTextNode(" ")); var m = document.createElement("span"); m.className = "chipmode"; m.textContent = "solo este modo"; td.appendChild(m); }
+        tr.appendChild(td);
+      });
+      bt.appendChild(tr);
+    });
+  }
+
+  document.querySelectorAll(".modes button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var m = b.getAttribute("data-mode");
+      try { history.replaceState(null, "", "#" + m); } catch (e) { location.hash = m; }
+      render(m);
+    });
+  });
+  window.addEventListener("hashchange", function () { render(location.hash.slice(1)); });
+  render(location.hash.slice(1) || "interno");
+})();
+</script>
