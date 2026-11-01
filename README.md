@@ -206,7 +206,7 @@ El otro método, con un osciloscopio en RA1, y los detalles están en [`docs/ana
 | `NORMALIZACION_ACTIVA` | 1 | normalización a VCC_A activa al arrancar |
 | `AUTOCERO_ACTIVO` | 1 | resta del offset del ADC medido en AVSS activa al arrancar |
 | `RELOJ` | 0 | 0 = oscilador interno (32 MHz); 1 = cristal de 4 MHz en RA5/RA4; 2 = oscilador de cuarzo de 4 MHz en RA5. Con 1 y 2, FOSC = 16 MHz (PLL ×4) ([`docs/reloj_externo_4MHz.md`](docs/reloj_externo_4MHz.md)) |
-| `CRISTAL_XT` | 0 | modo del cristal: 0 = HS, 1 = XT |
+| `CRISTAL_HS` | 0 | modo del cristal: 0 = XT (el de la hoja de datos para 4 MHz), 1 = HS |
 | `SALIDA_DISPARO` | 1 (0 con el cristal) | saca el PWM6 (instante de cada conversión) por RA1 en las compilaciones de producción |
 | `USAR_FVR` | 1 | mide el FVR para conocer VCC_A en voltios (protección de 2.5 V) |
 | `DIVISOR_VCCA` | 1 | 2 si se monta un divisor 1:2 en la entrada de VCC_A |

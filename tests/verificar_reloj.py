@@ -51,7 +51,11 @@ def registros(fw, defs):
             escritos.setdefault(reg, []).append(int(val, 0))
         config.update(re.findall(r"#pragma config (\w+) = (\w+)", texto))
     texto = preprocesar(os.path.join(fw, "app", "reloj.c"), defs + ["-I", mcc])
-    reloj = [int(v, 0) for v in re.findall(r"\bOSCCON1\s*=\s*(0x[0-9A-Fa-f]+)[uU]?\s*;", texto)]
+    reloj = {r: sorted({int(v, 0) for v in re.findall(r"\b%s\s*=\s*(0x[0-9A-Fa-f]+)[uU]?\s*;" % r, texto)})
+             for r in ("OSCCON1", "OSCFRQ")}
+    reloj["OSFIE"] = "PIE1bits.OSFIE = 1" in texto
+    texto = preprocesar(os.path.join(mcc, "interrupt_manager.c"), defs)
+    reloj["isr"] = bool(re.search(r"PIE1bits\.OSFIE == 1 && PIR1bits\.OSFIF == 1\)\s*\{\s*reloj_fallo_isr\(\);", texto))
     xtal = preprocesar_texto('#include "device_config.h"\nXTAL=_XTAL_FREQ\n', mcc, defs)
     m = re.search(r"XTAL=\s*(\d+)", xtal)
     return escritos, config, reloj, int(m.group(1)) if m else None
@@ -73,7 +77,7 @@ HFFRQ_MHZ = {0: 1, 1: 2, 2: 4, 3: 8, 4: 12, 5: 16, 6: 32}
 
 def parte_registros(fw):
     print("-- Registros de MCC en cada modo de reloj")
-    casos = [("interno", 0, [], "OFF"), ("cristal (HS)", 1, [], "HS"), ("cristal (XT)", 1, ["-DCRISTAL_XT=1"], "XT"),
+    casos = [("interno", 0, [], "OFF"), ("cristal (XT)", 1, [], "XT"), ("cristal (HS)", 1, ["-DCRISTAL_HS=1"], "HS"),
              ("oscilador", 2, [], "ECM")]
     for nombre, r, extra, fext in casos:
         w, cfg, osccon1_reloj, xtal = registros(fw, [f"-DRELOJ={r}"] + extra)
@@ -86,10 +90,15 @@ def parte_registros(fw):
         if r:
             comprobar(f"{nombre}: 4 MHz x PLL 4 = 16 MHz = HFINTOSC de reserva (OSCFRQ)", f_int == fosc,
                       f"OSCFRQ = {uno('OSCFRQ')} -> {f_int / 1e6:.0f} MHz")
-            comprobar(f"{nombre}: reloj.c pide EXTOSC x4 (0x20) y, si falla, HFINTOSC (0x60)",
-                      osccon1_reloj == [0x20, 0x60, 0x60], f"{[hex(v) for v in osccon1_reloj]}")
+            comprobar(f"{nombre}: reloj.c pide EXTOSC x4 (0x20) y, si falla, HFINTOSC (0x60) a 16 MHz (0x05)",
+                      osccon1_reloj["OSCCON1"] == [0x20, 0x60] and osccon1_reloj["OSCFRQ"] == [0x05],
+                      f"{osccon1_reloj}")
+            comprobar(f"{nombre}: el fallo (FSCM a 1 MHz) se atiende en la interrupcion OSFIF",
+                      osccon1_reloj["OSFIE"] and osccon1_reloj["isr"])
         else:
-            comprobar("interno: HFINTOSC a 32 MHz y reloj.c no toca el oscilador", f_int == 32e6 and not osccon1_reloj)
+            comprobar("interno: HFINTOSC a 32 MHz; reloj.c y la interrupcion no tocan el oscilador",
+                      f_int == 32e6 and not osccon1_reloj["OSCCON1"] and not osccon1_reloj["OSCFRQ"]
+                      and not osccon1_reloj["isr"])
         comprobar(f"{nombre}: _XTAL_FREQ = FOSC ({fosc / 1e6:.0f} MHz)", xtal == fosc, f"{xtal}")
         # TMR2 y PWM6: disparo del ADC
         presc = 2 ** ((uno("T2CON") >> 4) & 7)

@@ -7,19 +7,31 @@
 
   @Description
     Atiende el ADC (fin de cada conversion disparada por el PWM6, cada
-    100 us) y la EUSART1 (transmision y recepcion con buffer).
+    100 us) y la EUSART1 (transmision y recepcion con buffer). Con reloj
+    externo (opcion RELOJ), primero el fallo del oscilador (OSFIF): el FSCM
+    deja el PIC a 1 MHz y app/reloj.c lo devuelve a 16 MHz.
     Equivalente a lo que genera MCC Classic con
     docs/configuracion_MCC_Classic.md.
 */
 
 #include "interrupt_manager.h"
 #include "mcc.h"
+#if RELOJ_EXTERNO
+#include "../app/reloj.h"
+#endif
 
 void __interrupt() INTERRUPT_InterruptManager (void)
 {
     // interrupt handler
     if(INTCONbits.PEIE == 1)
     {
+#if RELOJ_EXTERNO
+        if(PIE1bits.OSFIE == 1 && PIR1bits.OSFIF == 1)
+        {
+            reloj_fallo_isr();
+        }
+        else
+#endif
         if(PIE1bits.ADIE == 1 && PIR1bits.ADIF == 1)
         {
             ADCC_ISR();

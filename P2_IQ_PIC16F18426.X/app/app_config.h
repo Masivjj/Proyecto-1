@@ -57,19 +57,22 @@
  *
  * RELOJ_INTERNO         HFINTOSC del PIC a 32 MHz (como hasta ahora). LED en
  *                       RA5, "Calibrar theta" en RA4, disparo del PWM6 en RA1.
- * RELOJ_CRISTAL_4MHZ    cristal de cuarzo de 4 MHz entre RA5 (OSC1, pin 2) y
+ * RELOJ_CRISTAL_4MHZ    cristal de cuarzo de 4 MHz (modo XT, o HS con
+ *                       CRISTAL_HS=1) entre RA5 (OSC1, pin 2) y
  *                       RA4 (OSC2, pin 3), con sus dos condensadores. El PLL
  *                       x4 da FOSC = 16 MHz. El LED pasa a RA0 (pin 13) y
  *                       "Calibrar theta" a RA1 (pin 12), asi que el disparo
  *                       del PWM6 ya no sale por RA1 (salvo SALIDA_DISPARO=1,
  *                       que deja sin ese pulsador: queda la orden 'c').
  * RELOJ_OSCILADOR_4MHZ  oscilador de cuarzo de 4 MHz con salida CMOS (modulo
- *                       de 4 patas) a RA5 (CLKIN, pin 2). PLL x4 = 16 MHz.
+ *                       de 4 patas) a RA5 (CLKIN, pin 2), modo ECM (hasta
+ *                       4 MHz, OS3). PLL x4 = 16 MHz (entrada 4-16 MHz, PLL01).
  *                       Solo el LED cambia de pin: pasa a RA0 (pin 13).
  *
  * Con reloj externo el PIC arranca con el HFINTOSC a 16 MHz y pasa al
  * externo (app/reloj.c). Si el externo no arranca en 100 ms, o se para
- * despues (monitor de fallos FSCM), sigue con el HFINTOSC a 16 MHz: las
+ * despues (monitor de fallos FSCM, que lo deja a 1 MHz y se atiende en la
+ * interrupcion OSFIF), sigue con el HFINTOSC a 16 MHz: las
  * mismas frecuencias de muestreo, con su +-2 %. La orden '?' dice que reloj
  * esta en uso y los bloques llevan la bandera 64 mientras se usa el de
  * reserva. Los registros de MCC tienen los valores de cada caso (#if RELOJ).
@@ -95,10 +98,11 @@
 #define RELOJ_EXTERNO       (RELOJ != RELOJ_INTERNO)
 #define F_EXTERNO_HZ        4000000UL
 
-/* Cristal: 0 = modo HS (ganancia alta: arranque seguro a 4 MHz, el limite
- * entre XT y HS), 1 = modo XT (ganancia media, menos potencia en el cristal) */
-#ifndef CRISTAL_XT
-#define CRISTAL_XT          0
+/* Cristal: 0 = modo XT (ganancia media; la hoja de datos lo recomienda
+ * hasta 4 MHz: seccion 8.2.1.2 y OS8, FXT <= 4 MHz), 1 = modo HS (ganancia
+ * alta, hasta 20 MHz: por si un cristal de ESR alta no arranca en XT) */
+#ifndef CRISTAL_HS
+#define CRISTAL_HS          0
 #endif
 
 /* ------------------------------------------------------------------------

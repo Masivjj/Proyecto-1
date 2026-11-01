@@ -19,8 +19,10 @@
  *   - pulsadores: una pulsacion de 150 ms y un rebote de 20 ms
  *   - oscilador (solo con RELOJ externo, app/reloj.c): el reloj de 4 MHz
  *     arranca a las 20 lecturas de COSC ("bien"), no arranca nunca
- *     ("ausente") o arranca y se para en t = 0.7 s ("falla": el FSCM pasa
- *     al HFINTOSC y activa OSFIF; el firmware debe fijar el HFINTOSC)
+ *     ("ausente") o arranca y se para en t = 0.7 s ("falla": como dice la
+ *     hoja de datos, 8.4.2, el FSCM pasa al HFINTOSC a 1 MHz y activa
+ *     OSFIF; con OSFIE se llama a la interrupcion, que debe volver a
+ *     16 MHz antes del disparo siguiente)
  *
  * Uso: sim <segundos> <archivo_eeprom> [bien|ausente|falla]
  *      (ver tests/Makefile, "make sim" y "make reloj")
@@ -31,6 +33,7 @@
 #include <string.h>
 #include "mcc_generated_files/mcc.h"
 #include "app/app_config.h"
+#include "app/reloj.h"
 
 #define PI 3.14159265358979
 #define OFFSET_ADC          3           /* LSB, en todas las conversiones */
@@ -51,6 +54,7 @@ sim_intcon_t INTCONbits;
 volatile sim_nvmcon1_t NVMCON1bits;
 uint8_t NVMADRH, NVMADRL, NVMDATL, NVMCON2;
 uint8_t OSCCON1 = 0x60;                 /* HFINTOSC (OSCILLATOR_Initialize) */
+uint8_t OSCFRQ = RELOJ_EXTERNO ? 0x05 : 0x06;
 int sim_led;
 
 /* ---- Tarjeta P2 simulada ---- */
@@ -256,10 +260,16 @@ static void un_disparo(void)
         reloj_caido = 1;
         disparo_caida = n_disparo;
         osccon2.COSC = 6;
+        OSCCON1 = 0x62;                 /* HFINTOSC a 1 MHz (NDIV distinto de 1:1) */
         PIR1bits.OSFIF = 1;
+#if RELOJ_EXTERNO
+        if (PIE1bits.OSFIE) {
+            reloj_fallo_isr();          /* interrupcion OSFIF */
+        }
+#endif
     }
-    if (reloj_caido && OSCCON1 != 0x60 && n_disparo - disparo_caida > 200) {
-        fallo("el firmware no fija el HFINTOSC 20 ms despues del fallo del reloj");
+    if (reloj_caido && (OSCCON1 != 0x60 || OSCFRQ != 0x05) && n_disparo > disparo_caida) {
+        fallo("el firmware no vuelve a 16 MHz antes del disparo siguiente al fallo del reloj");
     }
     PIR1bits.ADIF = 0;                      /* lo hace ADCC_ISR() */
     manejador_adc();

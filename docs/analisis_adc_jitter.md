@@ -7,7 +7,7 @@ Este documento responde a los requisitos de la pestaña PROYECTO 1:
 3. usar la **configuración básica de muestreo** (sección 32.2.7) con el circuito de muestreo y retención de la hoja de datos;
 4. **autocero con el conversor y el PWM**.
 
-Las referencias a la hoja de datos son al documento DS40001985B (PIC16(L)F18426/46). Las del ruido y el jitter siguen la nota de Texas Instruments sobre el ruido del ADC citada en la pestaña.
+Las referencias a la hoja de datos son al documento DS40001985C (PIC16(L)F18426/46). Las del ruido y el jitter siguen la nota de Texas Instruments sobre el ruido del ADC citada en la pestaña.
 
 ## 0. Resumen
 
@@ -45,7 +45,7 @@ Una conversión tiene tres fases (figura 32-2, *Analog-to-Digital Conversion TAD
 
 En este diseño: TAD = 1 µs (FOSC/32, dentro de los 0.5–9 µs de AD20); adquisición de 8 µs; conversión de ~14.3 µs; ADIF al terminar.
 
-### 1.2 Errores según la hoja de datos (tabla 40-13, VDD = 3.0 V, TAD = 1 µs)
+### 1.2 Errores según la hoja de datos (tabla 39-13, VDD = 3.0 V, TAD = 1 µs)
 
 | Parámetro | Típico | Máximo | Qué hace este diseño con él |
 |---|---|---|---|
@@ -167,9 +167,9 @@ Con 10 ns, el jitter cuesta 0.04 dB sobre un objetivo total de 60 dB: −10·log
 
 ### 5.1 HFINTOSC frente a un reloj externo
 
-- **HFINTOSC a 32 MHz** (configuración actual: RSTOSC = HFINT32, sin PLL). La hoja de datos solo da su exactitud (figura 40-6: ±2 % entre 0 y 60 °C; ±3 % hasta 85 °C; ±5 % en los extremos) y ningún dato de jitter. El ±0.25 % de PLL04 (*PLL Output Frequency Stability (Jitter)*) es del PLL, que no se usa a 32 MHz con HFINTOSC.
+- **HFINTOSC a 32 MHz** (configuración actual: RSTOSC = HFINT32, sin PLL). La hoja de datos solo da su exactitud (figura 39-6: ±2 % entre 0 y 60 °C; ±3 % hasta 85 °C; ±5 % en los extremos) y ningún dato de jitter. El ±0.25 % de PLL04 (*PLL Output Frequency Stability (Jitter)*) es del PLL, que no se usa a 32 MHz con HFINTOSC. **Sí se usa con el reloj externo de 4 MHz** (`RELOJ=1` o `2`, PLL ×4): ahí el PLL multiplica la señal del cristal y PLL04 se aplica. Un ±0.25 % de la frecuencia es un límite de estabilidad, no un jitter medido. No se puede convertir directamente en σ por muestra, pero no asegura los picosegundos del cristal. El jitter de 1 ms hay que medirlo también con el reloj externo (sección 6; con el cristal hace falta `SALIDA_DISPARO=1` para tener RA1).
 - **Exactitud no es jitter.** Un error de frecuencia del 2 % solo cambia la frecuencia de muestreo (1000 S/s ± 2 % por canal) y la escala de tiempo, sin añadir ruido. Lo que añade ruido son las variaciones rápidas del periodo. En un oscilador interno se acumulan de un ciclo al siguiente, así que el jitter entre dos disparos (3200 ciclos) y, sobre todo, entre dos muestras del mismo canal (1 ms, 32 000 ciclos) puede ser bastante mayor que el de un ciclo. No se puede predecir con la hoja de datos: hay que **medirlo**.
-- **Si la medida no da < 10 ns:** reloj externo en modo EC por CLKIN (**RA5, pin 2**), por ejemplo un oscilador de cristal CMOS de 32 MHz (FEXTOSC = ECH, RSTOSC = EXT1X) o uno de 8 MHz con el PLL ×4 (EXT4X). Los osciladores de cristal tienen un jitter de picosegundos. Hay que mover el LED, que estaba en RA5. **Ya está preparado como opción:** `RELOJ=1` (cristal de 4 MHz) o `RELOJ=2` (oscilador de cuarzo de 4 MHz por CLKIN), los dos con el PLL ×4 (16 MHz), y con el HFINTOSC de reserva si el reloj externo falta. Ver [`reloj_externo_4MHz.md`](reloj_externo_4MHz.md).
+- **Si la medida no da < 10 ns:** reloj externo en modo EC por CLKIN (**RA5, pin 2**), por ejemplo un oscilador de cristal CMOS de 32 MHz (FEXTOSC = ECH, RSTOSC = EXT1X) o uno de 8 MHz con el PLL ×4 (EXT4X). Los osciladores de cristal tienen un jitter de picosegundos, pero con el PLL ×4 se suma el del PLL (PLL04). Hay que mover el LED, que estaba en RA5. **Ya está preparado como opción:** `RELOJ=1` (cristal de 4 MHz) o `RELOJ=2` (oscilador de cuarzo de 4 MHz por CLKIN), los dos con el PLL ×4 (16 MHz), y con el HFINTOSC de reserva si el reloj externo falta. Ver [`reloj_externo_4MHz.md`](reloj_externo_4MHz.md).
 
 ---
 

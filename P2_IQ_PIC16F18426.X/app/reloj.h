@@ -20,9 +20,14 @@ enum {
  * deshabilitadas. Con reloj interno no hace nada. */
 void reloj_inicializar(void);
 
-/* Llamar en el lazo principal. Devuelve true una vez si el monitor de fallos
- * (FSCM) detecta que el reloj externo se ha parado: el PIC sigue con el
- * HFINTOSC a 16 MHz (mismas frecuencias de muestreo, con su +-2 %). */
+/* Interrupcion OSFIF (interrupt_manager.c): el monitor de fallos (FSCM) ha
+ * detectado que el reloj externo se ha parado y ha pasado al HFINTOSC a
+ * 1 MHz. Vuelve a 16 MHz con el HFINTOSC (mismas frecuencias de muestreo,
+ * con su +-2 %). Solo con reloj externo. */
+void reloj_fallo_isr(void);
+
+/* Llamar en el lazo principal. Devuelve true una vez despues de un fallo
+ * del reloj externo en marcha, para avisar por la UART. */
 bool reloj_tarea(void);
 
 uint8_t reloj_estado(void);         /* RELOJ_EST_x */

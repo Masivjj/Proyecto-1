@@ -11,7 +11,8 @@
     genera MCC Classic con docs/configuracion_MCC_Classic.md.
 
     FEXTOSC depende de la opcion RELOJ (app/app_config.h): OFF con el reloj
-    interno, HS (o XT) con el cristal de 4 MHz y ECM con el oscilador de
+    interno, XT (o HS con CRISTAL_HS=1) con el cristal de 4 MHz (la hoja de
+    datos da XT hasta 4 MHz, OS8) y ECM (hasta 4 MHz, OS3) con el oscilador de
     4 MHz. Se arranca siempre con el HFINTOSC; app/reloj.c pasa al externo.
     Si se regenera con MCC, hay que volver a poner este #if.
 */
@@ -22,10 +23,10 @@
 
 // CONFIG1
 #if RELOJ == RELOJ_CRISTAL_4MHZ
-#if CRISTAL_XT
-#pragma config FEXTOSC = XT    // External Oscillator mode selection bits->XT (crystal oscillator) above 500kHz, below 4MHz; PFM set to medium power
-#else
+#if CRISTAL_HS
 #pragma config FEXTOSC = HS    // External Oscillator mode selection bits->HS (crystal oscillator) above 4MHz; PFM set to high power
+#else
+#pragma config FEXTOSC = XT    // External Oscillator mode selection bits->XT (crystal oscillator) above 500kHz, below 4MHz; PFM set to medium power
 #endif
 #elif RELOJ == RELOJ_OSCILADOR_4MHZ
 #pragma config FEXTOSC = ECM    // External Oscillator mode selection bits->EC for 500kHz to 8MHz; PFM set to medium power
